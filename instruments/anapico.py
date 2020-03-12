@@ -22,6 +22,7 @@ LAST_ERROR_MESSAGE = ""
 IS_ERROR = False
 
 
+
 def ERR(*args, **kwarg):
     global LAST_ERROR_MESSAGE, IS_ERROR
     IS_ERROR |= True
@@ -64,6 +65,26 @@ class AnaPico(instr.Instr):
         self._current_channel = 1
         self.current_channel = 1
 
+
+    def write(self, command, debug=False):
+        if debug is True:
+            print(f"Writing {command}")
+            print(f'Before:\n {self.debug_status()}')
+        self.visa_instr.write(command)
+        if debug is True:
+            print(f'After:\n {self.debug_status()}')
+
+
+    def query(self, command, debug=False):
+        if debug is True:
+            print(f"Querying {command}")
+            print(f'Before:\n {self.debug_status()}')
+        self.visa_instr.query(command)
+        if debug is True:
+            print(f'After:\n {self.debug_status()}')
+        return self.visa_instr.query(command)
+
+
     @property
     def current_channel(self):
         ch = int(self.query(':SEL?'))
@@ -82,8 +103,28 @@ class AnaPico(instr.Instr):
                 f'Channel {channel} is not available. Choose a integer in {self.available_channels}. Current channel: {self.current_channel}.'
             )
 
-    # def __del__(self):
-    #   pass
+    def clean(self):
+        self.cls()
+        super(AnaPico, self).clean()
+
+    def debug_status(self):
+        stb = self.query('*STB?')  # status byte
+        ese = self.query('*ESE?')  # standard event status enable
+        esr = self.query('*ESR?')  # standard event status register
+        sre = self.query('*SRE?')  # service request enable
+        operation_status_condition_register = self.query(':STATUS:OPER:COND?')
+        operation_status_event_register = self.query(':STATUS:OPER?')
+        questionable_status_condition_register = self.query(':STATUS:QUES:COND?')
+        questionable_status_event_register = self.query(':STATUS:QUES?')
+        errors = self.query(':SYST:ERR:ALL?')
+        out = f'\nstb: {stb} | ese: {ese} | esr: {esr} | sre: {sre}\n'
+        out += f'operation status: ( condition: {operation_status_condition_register} | event: {operation_status_event_register} )\n'
+        out += f'questionable status: ( condition: {questionable_status_condition_register} | event: {questionable_status_event_register} )\n'
+        out += f'errors: {errors}\n'
+        return out
+
+    def __del__(self):
+        super(AnaPico, self).__del__()
 
     def __str__(self):
         return self.idn
@@ -344,3 +385,6 @@ class AnaPico(instr.Instr):
 
         self.write(f':CORR:FLAT:STOR "{preset_name}"')
         self.write(f':CORR:FLAT:LOAD "{preset_name}"')
+
+    def trigger(self):
+        self.write('*TRG')

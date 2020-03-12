@@ -188,11 +188,13 @@ class Yoko750(instr.Instr):
         self.trace_current = None
         self.current_trace()
 
-    def __del__(self):
-        self.remote_mode = False
-        time.sleep(0.1)
+    def clean(self):
         # self.write("COMMUNICATE:HEADER ON")
         INFO("NOT Reactivating headers")
+        self.remote_mode = False
+        super(Yoko750, self).clean()
+
+    def __del__(self):
         super(Yoko750, self).__del__()
 
     def __str__(self):
@@ -672,7 +674,7 @@ class Yoko750(instr.Instr):
         if position is None:
             return float(self.query("TRIG:POS?"))
         elif position >= 0.0 and position <= 100.0:
-            self.write("TRIG:POS {0:.2f}".format(position))
+            self.write(f"TRIG:POS {position:.3f}")
         else:
             ERR("position must be between 0 and 100 (in %).")
 
@@ -1498,8 +1500,8 @@ class Yoko750(instr.Instr):
                     for key, value in self.traces[t - 1].__dict__.items()
                     if not key.startswith('__')
                     and not callable(key)
-                    and key is not 'x'
-                    and key is not 'y'
+                    and key != 'x'
+                    and key != 'y'
                 }
             )
 

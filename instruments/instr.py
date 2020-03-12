@@ -22,24 +22,19 @@ class Instr(object):
         # self.visa_instr.lock = NI_NO_LOCK
         print("Instrument initialized.")
         print("VISA resource: {0}".format(self.visa_name))
+        self._clean = False
 
     def clean(self):
         self.visa_instr.clear()
         self.visa_instr.close()
-        del self.visa_instr
+        self._clean = True
         print(f"VISA instrument released ({self.visa_name}).")
-        self.visa_resource_manager.close()
-        del self.visa_resource_manager
-        print(f"VISA resource manager released (for {self.visa_name}).")
 
     def __del__(self):
-        self.visa_instr.clear()
-        self.visa_instr.close()
+        if not self._clean:
+            self.clean()
         del self.visa_instr
-        print(f"VISA instrument released ({self.visa_name}).")
-        self.visa_resource_manager.close()
-        del self.visa_resource_manager
-        print(f"VISA resource manager released (for {self.visa_name}).")
+        # del self.visa_resource_manager
 
     def get_idn(self):
         IDN = self.visa_instr.query("*IDN?")
@@ -49,8 +44,7 @@ class Instr(object):
         self.visa_instr.clear()
         print("Instrument cleared.")
 
-    def cls(self):
-        # Clear the instrument's Status Byte
+    def cls(self):  # SCPI equivalent of (py-)VISA command clear() ?
         self.visa_instr.write("*CLS")
         return "*CLS command sent."
 
