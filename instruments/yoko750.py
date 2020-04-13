@@ -3,13 +3,13 @@
 # 2016-07, Collège de France
 
 import instruments.instr as instr
-import importlib
-importlib.reload(instr)
 import visa
 import time
 import numpy as np
 import matplotlib.pyplot as plt
 
+import importlib
+importlib.reload(instr)
 
 RETURN_ERROR = False
 RETURN_NO_ERROR = None
@@ -29,6 +29,7 @@ IS_ERROR = False
 
 import inspect
 
+
 def ERR(arg):
     global LAST_ERROR_MESSAGE, IS_ERROR
     IS_ERROR |= True
@@ -45,8 +46,6 @@ def WARN(arg):
 def INFO(arg):
     if _DEBUG_ or _INFO_:
         print("INFO in {0}(): ".format(inspect.stack()[1][3]) + arg)
-
-
 
 
 class Yoko750(instr.Instr):
