@@ -2,8 +2,8 @@
 # Author: Jean-Loup SMIRR, jean-loup.smirr|at|college-de-france dot fr
 # 2016-07, Collège de France
 
-import instruments.instr as instr
-import visa
+from instruments import instr
+import pyvisa as visa
 import time
 import numpy as np
 import matplotlib.pyplot as plt
@@ -87,7 +87,7 @@ class Yoko750(instr.Instr):
         else:
             INFO("Communication OK")
             INFO("Disabling headers")
-            self.write("COMM:HEAD 0")
+            self.write(":COMM:HEAD 0")
 
         # Yoko750 general configuration
         self.hardware_channels = installed_channels
@@ -120,9 +120,11 @@ class Yoko750(instr.Instr):
         ]  # Unit: Samples/s
         self.possible_record_lengths = [
             1e3,
+            1001, ###########
             2.5e3,
             5e3,
             10e3,
+            10010, ##############
             25e3,
             50e3,
             100e3,
@@ -194,6 +196,8 @@ class Yoko750(instr.Instr):
         super(Yoko750, self).clean()
 
     def __del__(self):
+        if not self._clean:
+            self.clean()
         super(Yoko750, self).__del__()
 
     def __str__(self):
@@ -204,7 +208,7 @@ class Yoko750(instr.Instr):
 
     @property
     def calibration_auto(self):
-        out = self.query("CAL?")
+        out = self.query(":CAL?")
         if out == "AUTO":
             return True
         elif out == "OFF":
@@ -216,21 +220,21 @@ class Yoko750(instr.Instr):
     @calibration_auto.setter
     def calibration_auto(self, mode):
         if mode is True:
-            self.write("CAL:MODE AUTO")
+            self.write(":CAL:MODE AUTO")
         elif mode is False:
-            self.write("CAL:MODE OFF")
+            self.write(":CAL:MODE OFF")
         else:
             ERR("Parameter must be True or False")
 
     def calibration_execute(self):
-        self.write("CAL:EXEC")
+        self.write(":CAL:EXEC")
 
     @property
     def remote_mode(self):
         if self.visa_instr.interface_type == visa.constants.InterfaceType.gpib:
             return self.visa_instr.remote_enabled == visa.constants.LineState.asserted
         else:
-            return self.query("COMM:REM?")
+            return self.query(":COMM:REM?")
 
     @remote_mode.setter
     def remote_mode(self, mode):
@@ -243,9 +247,9 @@ class Yoko750(instr.Instr):
                 ERR("Parameter must be True or False")
         else:
             if mode is True:
-                self.write("COMM:REM 1")
+                self.write(":COMM:REM 1")
             elif mode is False:
-                self.write("COMM:REM 0")
+                self.write(":COMM:REM 0")
             else:
                 ERR("Parameter must be True or False")
 
@@ -260,7 +264,7 @@ class Yoko750(instr.Instr):
     SER_POWER_ON = 128
 
     def _standard_event_register(self):
-        return self.query_ascii_values("STAT:COND?")[0]
+        return self.query_ascii_values(":STAT:COND?")[0]
 
     def operation_complete(self):
         """Returns the truthness of the OPC bit in the Standard Event Register
@@ -314,7 +318,7 @@ class Yoko750(instr.Instr):
         """
         if yes is None:
             try:
-                if 1 & int(self.query("STAT:COND?")):
+                if 1 & int(self.query(":STAT:COND?")):
                     return True
                 else:
                     return False
@@ -338,8 +342,8 @@ class Yoko750(instr.Instr):
     def snapshot(self, filename=None):
         import io
 
-        self.write('IMAG:FORM PNG')
-        self.write('IMAG:SEND?')
+        self.write(':IMAG:FORM PNG')
+        self.write(':IMAG:SEND?')
         termination = self.visa_instr.read_termination
         self.visa_instr.read_termination = None
         bindata = self.visa_instr.read_raw()
@@ -374,9 +378,9 @@ class Yoko750(instr.Instr):
         * if argument is a valid integer, changes the number of points. Possible values are listed in class parameter ``possible_record_lengths``
         """
         if value is None:
-            return self.query_ascii_values("ACQ:RLEN?")[0]
+            return self.query_ascii_values(":ACQ:RLEN?")[0]
         elif value in self.possible_record_lengths:
-            self.write("ACQ:RLEN {0}".format(value))
+            self.write(":ACQ:RLEN {0}".format(value))
             return RETURN_NO_ERROR
         else:
             ERR("Possible record lengths are {0}".format(self.possible_record_lengths))
@@ -386,15 +390,15 @@ class Yoko750(instr.Instr):
         """ Query (without argument) or set the clock type: True for ``EXTernal``, False for ``INTernal``.
         """
         if yes is None:
-            if self.query("ACQ:CLOC?").upper().startswith("EXT"):
+            if self.query(":ACQ:CLOC?").upper().startswith("EXT"):
                 return True
             else:
                 return False
         elif yes:
-            self.write("ACQ:CLOC EXT")
+            self.write(":ACQ:CLOC EXT")
             return RETURN_NO_ERROR
         elif not yes:
-            self.write("ACQ:CLOC INT")
+            self.write(":ACQ:CLOC INT")
             return RETURN_NO_ERROR
         else:
             ERR(
@@ -411,7 +415,7 @@ class Yoko750(instr.Instr):
         """
         if number is None:
             if self.acq_mode() == "AVER":
-                out = self.query("ACQ:AVER:COUN?")
+                out = self.query(":ACQ:AVER:COUN?")
                 if out in [str(n) for n in range(2, 65537)]:
                     return int(out)
                 else:
@@ -434,7 +438,7 @@ class Yoko750(instr.Instr):
                 return RETURN_ERROR
             else:
                 self.acq_mode("AVER")
-                self.write("ACQ:AVER:COUN INF")
+                self.write(":ACQ:AVER:COUN INF")
                 return RETURN_NO_ERROR
         elif number >= 2 and number <= 65536:
             if self.trigger_mode() in ["SING", "NSIN", "LOG"]:
@@ -451,7 +455,7 @@ class Yoko750(instr.Instr):
                             number, rounded_number
                         )
                     )
-                self.write("ACQ:AVER:COUN {0}".format(rounded_number))
+                self.write(":ACQ:AVER:COUN {0}".format(rounded_number))
                 return RETURN_NO_ERROR
         else:
             ERR(
@@ -461,7 +465,7 @@ class Yoko750(instr.Instr):
 
     # Use averaging() instead
     # def set_acq_mode_normal(self):
-    #   self.write("ACQ:MODE NORM")
+    #   self.write(":ACQ:MODE NORM")
     #   return RETURN_NO_ERROR
 
     # Use averaging() instead (for AVER mode at least)
@@ -472,22 +476,22 @@ class Yoko750(instr.Instr):
         * if argument is ``NORM``, ``AVER``, ``BAV`` or ``ENV``, change the averaging type accordingly.
         """
         if mode is None:
-            return self.query("ACQ:MODE?")
+            return self.query(":ACQ:MODE?")
         elif mode.upper().startswith("NORM"):
-            self.write("ACQ:MODE NORM")
+            self.write(":ACQ:MODE NORM")
             return RETURN_NO_ERROR
         elif mode.upper().startswith("AVER"):
-            self.write("ACQ:MODE AVER")
+            self.write(":ACQ:MODE AVER")
             return RETURN_NO_ERROR
         elif mode.upper().startswith("BAV"):
-            self.write("ACQ:MODE BAV")
+            self.write(":ACQ:MODE BAV")
             return RETURN_NO_ERROR
         elif mode.upper().startswith("ENV"):
-            self.write("ACQ:MODE ENV")
+            self.write(":ACQ:MODE ENV")
             return RETURN_NO_ERROR
         else:
             ERR(
-                "Acquisistion mode must be 'NORMal', 'AVERage', 'BAVerage' or 'ENVelope' (short or long form, case-insensitive)."
+                ":ACQuisistion mode must be 'NORMal', 'AVERage', 'BAVerage' or 'ENVelope' (short or long form, case-insensitive)."
             )
             return RETURN_ERROR
 
@@ -505,9 +509,9 @@ class Yoko750(instr.Instr):
         """ Query (without argument) or set the timebase in Hz. Possible values are listed in property ``possible_timebases``
         """
         if value is None:
-            return self.query_ascii_values("TIM:SRAT?")[0]
+            return self.query_ascii_values(":TIM:SRAT?")[0]
         elif value in self.possible_timebases:
-            self.write("TIM:SRAT {0}".format(value))
+            self.write(":TIM:SRAT {0}".format(value))
             return RETURN_NO_ERROR
         else:
             ERR("Possible sample rate values are {0}".format(self.possible_timebases))
@@ -517,15 +521,15 @@ class Yoko750(instr.Instr):
         """ Query (without argument) or set the source of the timebase. Possible values are ``True`` for internal and ``False`` for external.
         """
         if yes is None:
-            if self.query("TIM:SOUR?").upper().startswith("INT"):
+            if self.query(":TIM:SOUR?").upper().startswith("INT"):
                 return True
             else:
                 return False
         elif yes:
-            self.write("TIM:SOUR INT")
+            self.write(":TIM:SOUR INT")
             return RETURN_NO_ERROR
         elif not yes:
-            self.write("TIM:SOUR EXT")
+            self.write(":TIM:SOUR EXT")
             return RETURN_NO_ERROR
         else:
             ERR(
@@ -538,9 +542,9 @@ class Yoko750(instr.Instr):
         """ Query (without argument) or set the time per division. Possible values are from 500e-9 to 1800.
         """
         if value is None:
-            return self.query_ascii_values("TIM:TDIV?")[0]
+            return self.query_ascii_values(":TIM:TDIV?")[0]
         elif value >= 500e-9 and value <= 1800:
-            self.write("TIM:TDIV {0}".format(value))
+            self.write(":TIM:TDIV {0}".format(value))
             return RETURN_NO_ERROR
         else:
             ERR("Possible time per division is from 500e-9 to 1800.")
@@ -567,9 +571,9 @@ class Yoko750(instr.Instr):
             return RETURN_ERROR
 
         if value is None:
-            return self.query_ascii_values("CHAN{0}:VDIV?".format(tr))[0]
+            return self.query_ascii_values(":CHAN{0}:VDIV?".format(tr))[0]
         elif value >= 0.1e-3 and value <= 200:
-            self.write("CHAN{0}:VDIV {1}".format(tr, value))
+            self.write(":CHAN{0}:VDIV {1}".format(tr, value))
             return RETURN_NO_ERROR
         else:
             ERR("Possible volt per division from 0.1e-3 to 200")
@@ -577,7 +581,7 @@ class Yoko750(instr.Instr):
 
     # OK
     def errors_get_last(self):
-        return self.query("STAT:ERR?")
+        return self.query(":STAT:ERR?")
 
     def errors_get_all(self):
         errors = [self.errors_get_last()]
@@ -591,7 +595,7 @@ class Yoko750(instr.Instr):
 
     @property
     def waveformat(self):
-        out = self.query('WAV:FORM?')
+        out = self.query(':WAV:FORM?')
         if out.upper().startswith(FORMAT_WORD.upper()):
             self._waveformat = FORMAT_WORD
         elif out.upper().startswith(FORMAT_BYTE.upper()):
@@ -606,23 +610,23 @@ class Yoko750(instr.Instr):
             formattype.upper() == FORMAT_ASCII.upper()
             and self._waveformat != FORMAT_ASCII
         ):
-            self.write('WAV:FORM ASC')
+            self.write(':WAV:FORM ASC')
             self._waveformat == FORMAT_ASCII
         elif (
             formattype.upper() == FORMAT_BYTE.upper()
             and self._waveformat != FORMAT_BYTE
         ):
-            self.write('WAV:FORM BYTE')
-            assert self.query("WAV:BITS?") == '8'
-            self.write("WAV:BYTE LSBFIRST")
+            self.write(':WAV:FORM BYTE')
+            assert self.query(":WAV:BITS?") == '8'
+            self.write(":WAV:BYTE LSBFIRST")
             self._waveformat == FORMAT_BYTE
         elif (
             formattype.upper() == FORMAT_WORD.upper()
             and self._waveformat != FORMAT_WORD
         ):
-            self.write('WAV:FORM WORD')
-            assert self.query("WAV:BITS?") == '16'
-            self.write("WAV:BYTE LSBFIRST")
+            self.write(':WAV:FORM WORD')
+            assert self.query(":WAV:BITS?") == '16'
+            self.write(":WAV:BYTE LSBFIRST")
             self._waveformat == FORMAT_WORD
         else:
             ERR(
@@ -635,152 +639,152 @@ class Yoko750(instr.Instr):
 
     # # OK
     # def set_format_ascii(self):
-    #   self.write('WAV:FORM ASC')
+    #   self.write(':WAV:FORM ASC')
     #   #self._waveformat = FORMAT_ASCII
 
     # # OK
     # def set_format_binary8bit(self):
-    #   self.write('WAV:FORM BYTE')
-    #   assert self.query("WAV:BITS?") == '8'
+    #   self.write(':WAV:FORM BYTE')
+    #   assert self.query(":WAV:BITS?") == '8'
     #   #self._waveformat = FORMAT_BYTE
-    #   self.write("WAV:BYTE LSBFIRST")
+    #   self.write(":WAV:BYTE LSBFIRST")
 
     # # OK
     # def set_format_binary16bit(self):
-    #   self.write('WAV:FORM WORD')
-    #   assert self.query("WAV:BITS?") == '16'
+    #   self.write(':WAV:FORM WORD')
+    #   assert self.query(":WAV:BITS?") == '16'
     #   #self._waveformat = FORMAT_WORD
-    #   self.write("WAV:BYTE LSBFIRST")
+    #   self.write(":WAV:BYTE LSBFIRST")
 
     # OK
     def start(self):
         if len(self.active_traces) != 0:
-            self.write("STAR")
+            self.write(":STAR")
         else:
             WARN("Couldn't start acquisition: no active trace")
             return RETURN_ERROR
 
     # OK
     def stop(self):
-        self.write("STOP")
+        self.write(":STOP")
 
     # OK
     def trig(self):
-        self.write("MTR")
+        self.write(":MTR")
 
     # OK
     def trigger_position(self, position=None):
         if position is None:
-            return float(self.query("TRIG:POS?"))
+            return float(self.query(":TRIG:POS?"))
         elif position >= 0.0 and position <= 100.0:
-            self.write(f"TRIG:POS {position:.3f}")
+            self.write(f":TRIG:POS {position:.3f}")
         else:
             ERR("position must be between 0 and 100 (in %).")
 
     def trigger_source(self, source=None):
         if source is None:
-            tmp = self.query("TRIG:SIMP:SOUR?")
+            tmp = self.query(":TRIG:SIMP:SOUR?")
             if tmp in [str(x) for x in self.hardware_channels]:
                 return int(tmp)
             else:
                 return tmp.upper()
         elif isinstance(source, str) and len(source) == 3:
             if source.upper().startswith("EXT"):
-                self.write("TRIG:SIMP:SOUR EXT")
+                self.write(":TRIG:SIMP:SOUR EXT")
                 return RETURN_NO_ERROR
         elif isinstance(source, str) and len(source) >= 4:
             if source.upper().startswith("EXT"):
-                self.write("TRIG:SIMP:SOUR EXT")
+                self.write(":TRIG:SIMP:SOUR EXT")
                 return RETURN_NO_ERROR
             if source.upper().startswith("LINE"):
-                self.write("TRIG:SIMP:SOUR LINE")
+                self.write(":TRIG:SIMP:SOUR LINE")
                 return RETURN_NO_ERROR
-            elif source.upper().startswith("TIME"):
-                self.write("TRIG:SIMP:SOUR TIME")
+            elif source.upper().startswith(":TIME"):
+                self.write(":TRIG:SIMP:SOUR TIME")
                 return RETURN_NO_ERROR
             elif source.upper().startswith("PODA"):
-                self.write("TRIG:SIMP:SOUR PODA")
+                self.write(":TRIG:SIMP:SOUR PODA")
                 return RETURN_NO_ERROR
             elif source.upper().startswith("PODB"):
-                self.write("TRIG:SIMP:SOUR PODB")
+                self.write(":TRIG:SIMP:SOUR PODB")
                 return RETURN_NO_ERROR
         elif isinstance(source, int):
             if source in self.hardware_channels:
-                self.write("TRIG:SIMP:SOUR {0}".format(source))
+                self.write(":TRIG:SIMP:SOUR {0}".format(source))
                 return RETURN_NO_ERROR
             else:
                 ERR(
-                    "Trigger source must be a valid hardware channel or 'EXTernal', 'LINE', 'TIME', 'PODA' or PODB' (short or long form, case-insensitive)."
+                    ":TRIGger source must be a valid hardware channel or 'EXTernal', 'LINE', 'TIME', 'PODA' or PODB' (short or long form, case-insensitive)."
                 )
                 return RETURN_ERROR
         else:
             ERR(
-                "Trigger source must be a valid hardware channel or 'EXTernal', 'LINE', 'TIME', 'PODA' or PODB' (short or long form, case-insensitive)."
+                ":TRIGger source must be a valid hardware channel or 'EXTernal', 'LINE', 'TIME', 'PODA' or PODB' (short or long form, case-insensitive)."
             )
             return RETURN_ERROR
 
     def trigger_mode(self, mode=None):
         if mode is None:
-            return self.query("TRIG:MODE?").upper()
+            return self.query(":TRIG:MODE?").upper()
         elif isinstance(mode, str):
             if mode.upper().startswith("REP"):
-                self.write("TRIG:MODE REP")
+                self.write(":TRIG:MODE REP")
                 return RETURN_NO_ERROR
             if mode.upper().startswith("AUTO"):
-                self.write("TRIG:MODE AUTO")
+                self.write(":TRIG:MODE AUTO")
                 return RETURN_NO_ERROR
             elif mode.upper().startswith("ALEV"):
-                self.write("TRIG:MODE ALEV")
+                self.write(":TRIG:MODE ALEV")
                 return RETURN_NO_ERROR
             elif mode.upper().startswith("NORM"):
-                self.write("TRIG:MODE NORM")
+                self.write(":TRIG:MODE NORM")
                 return RETURN_NO_ERROR
             elif mode.upper().startswith("SING"):
-                self.write("TRIG:MODE SING")
+                self.write(":TRIG:MODE SING")
                 return RETURN_NO_ERROR
             elif mode.upper().startswith("NSIN"):
-                self.write("TRIG:MODE NSIN")
+                self.write(":TRIG:MODE NSIN")
                 return RETURN_NO_ERROR
         else:
             ERR(
-                "Trigger mode must be 'AUTO', 'ALEVel', 'NORMal', 'SINGle' or 'NSINgle' (short or long form, case-insensitive)."
+                ":TRIGger mode must be 'AUTO', 'ALEVel', 'NORMal', 'SINGle' or 'NSINgle' (short or long form, case-insensitive)."
             )
             return RETURN_ERROR
 
     def trigger_level(self, level=None, slope_down=False):
         trig_source = self.trigger_source()
         if level is None:
-            return self.query_ascii_values("TRIG:LEV?")[0]
+            return self.query_ascii_values(":TRIG:LEV?")[0]
         elif isinstance(trig_source, str):
             if not trig_source.upper().startswith(
                 ('EXT', 'LINE', 'TIME', 'LOGICA', 'LOGICB')
             ):
-                self.write("TRIG:POS {0}".format(level))
+                self.write(":TRIG:POS {0}".format(level))
             else:
                 ERR(
                     "level cannot be adjusted with trig mode 'EXTernal','LINE','TIME',LOGICA' or 'LOGICB'"
                 )
         elif isinstance(trig_source, int):
-            self.write("TRIG:POS {0}".format(level))
+            self.write(":TRIG:POS {0}".format(level))
         else:
             ERR(
                 "level cannot be adjusted with trig mode 'EXTernal','LINE','TIME',LOGICA' or 'LOGICB'"
             )
         if slope_down:
-            self.write("TRIG:SLOP FALL")
+            self.write(":TRIG:SLOP FALL")
         else:
-            self.write("TRIG:SLOP RISE")
+            self.write(":TRIG:SLOP RISE")
 
     def XY(self, XYmode=None, numdisplay=1, xaxis=11):
         if XYmode is None:
-            return self.query(f"XY{numdisplay}?")
+            return self.query(f":XY{numdisplay}?")
         elif XYmode:
-            self.write(f"XY{numdisplay}:MODE XY")
-            self.write(f"XY{numdisplay}:XAX SING")
-            self.write(f"XY{numdisplay}:XTR {xaxis}")
+            self.write(f":XY{numdisplay}:MODE XY")
+            self.write(f":XY{numdisplay}:XAX SING")
+            self.write(f":XY{numdisplay}:XTR {xaxis}")
             return RETURN_NO_ERROR
         elif not XYmode:
-            self.write(f"XY{numdisplay}:MODE TY")
+            self.write(f":XY{numdisplay}:MODE TY")
             return RETURN_NO_ERROR
         else:
             ERR(
@@ -810,7 +814,7 @@ class Yoko750(instr.Instr):
                 if isinstance(tr, int):
                     if tr in self.hardware_channels:
                         if tr in self.active_traces:
-                            self.write("CHAN{0}:DISP OFF".format(tr))
+                            self.write(":CHAN{0}:DISP OFF".format(tr))
                             self.active_traces.remove(tr)
                             self.traces[tr - 1].active = False
                             INFO("Trace {0} disabled.".format(tr))
@@ -856,7 +860,7 @@ class Yoko750(instr.Instr):
                         if tr in self.active_traces:
                             WARN("Trace {0} already ON.".format(tr))
                         else:
-                            self.write("CHAN{0}:DISP ON".format(tr))
+                            self.write(":CHAN{0}:DISP ON".format(tr))
                             self.active_traces += [tr]
                             # self.active_traces.sort()
                             self.traces[tr - 1].active = True
@@ -881,13 +885,13 @@ class Yoko750(instr.Instr):
         - if argument is an integer: set this trace as current trace
         """
         if numtrace is None:
-            buff = self.query('WAV:TRAC?')
+            buff = self.query(':WAV:TRAC?')
             try:
                 self.trace_current = int(buff)
                 out = self.trace_current
             except:
                 tr = self.hardware_channels[0]
-                self.write("WAV:TRAC {0}".format(tr))
+                self.write(":WAV:TRAC {0}".format(tr))
                 self.trace_current = tr
                 INFO("Trace {0} selected as current trace.".format(tr))
                 WARN(
@@ -898,7 +902,7 @@ class Yoko750(instr.Instr):
                 out = self.trace_current
         elif isinstance(numtrace, int):
             if numtrace in self.hardware_channels:
-                self.write("WAV:TRAC {0}".format(numtrace))
+                self.write(":WAV:TRAC {0}".format(numtrace))
                 self.trace_current = numtrace
                 out = self.trace_current
                 # INFO("Trace {0} selected as current trace.".format(numtrace))
@@ -919,7 +923,7 @@ class Yoko750(instr.Instr):
         """
         self.active_traces = []
         for i in self.hardware_channels:
-            if self.query("CHAN{0}:DISP?".format(i)) == "1":
+            if self.query(":CHAN{0}:DISP?".format(i)) == "1":
                 self.active_traces += [i]
                 self.traces[i - 1].active = True
             else:
@@ -933,17 +937,17 @@ class Yoko750(instr.Instr):
 
     # def record_length(self,value=None):
     #   if value is None:
-    #       return self.query_ascii_values("WAV:LENG?")[0]
+    #       return self.query_ascii_values(":WAV:LENG?")[0]
     #   elif value in self.possible_record_lengths:
-    #       self.write("WAV:LENG {0}".format(value))
+    #       self.write(":WAV:LENG {0}".format(value))
     #   else:
     #       ERR("Possible sample rate values are {0}".format(possible_record_lengths))
 
     # def nb_points(self,value=None):
     #   if value is None:
-    #       return self.query_ascii_values("WAV:LENG?")[0]
+    #       return self.query_ascii_values(":WAV:LENG?")[0]
     #   elif value in self.possible_record_lengths+1:
-    #       self.write("WAV:LENG {0}".format(value))
+    #       self.write(":WAV:LENG {0}".format(value))
     #   else:
     #       ERR("Possible sample rate values are {0}".format(possible_record_lengths+1))
 
@@ -962,25 +966,25 @@ class Yoko750(instr.Instr):
         else:
             ERR("Trace {0} not enabled, cannot read data.".format(tracenum))
             return RETURN_ERROR
-        N = self.query_ascii_values("WAV:LENG?")[0]
-        self.write("WAV:END {0}".format(N + 1))
+        N = self.query_ascii_values(":WAV:LENG?")[0]
+        self.write(":WAV:END {0}".format(N + 1))
         self.traces[trace_to_get - 1].N = N
-        data = self.query_ascii_values("WAV:SEND?")
+        data = self.query_ascii_values(":WAV:SEND?")
         self.traces[trace_to_get - 1].y = np.array(data)
-        rang = self.query_ascii_values("WAV:RANG?")[0]
-        offs = self.query_ascii_values("WAV:OFFS?")[0]
+        rang = self.query_ascii_values(":WAV:RANG?")[0]
+        offs = self.query_ascii_values(":WAV:OFFS?")[0]
         self.traces[trace_to_get - 1].yrange = rang
         self.traces[trace_to_get - 1].offset = offs
         self.traces[trace_to_get - 1].bandwidth = self.bandwidth(trace_to_get)
         self.traces[trace_to_get - 1].invert = self.invert(trace_to_get)
         self.traces[trace_to_get - 1].ac_coupled = self.ac_coupled(trace_to_get)
-        self.traces[trace_to_get - 1].module = self.query("WAV:MOD?")
-        self.traces[trace_to_get - 1].srate = float(self.query("WAV:SRAT?"))
+        self.traces[trace_to_get - 1].module = self.query(":WAV:MOD?")
+        self.traces[trace_to_get - 1].srate = float(self.query(":WAV:SRAT?"))
         self.traces[trace_to_get - 1].x = (
             np.arange(N) / self.traces[trace_to_get - 1].srate
         )
         self.traces[trace_to_get - 1].probe = self.query_ascii_values(
-            "CHAN{0}:PROB?".format(trace_to_get)
+            ":CHAN{0}:PROB?".format(trace_to_get)
         )[0]
         self.traces[trace_to_get - 1].averaging = self.averaging()
         return np.array(data)
@@ -1019,17 +1023,17 @@ class Yoko750(instr.Instr):
             ERR("Trace {0} not enabled, cannot read data.".format(tracenum))
             return RETURN_ERROR
 
-        self.write("WAV:REC 0")
+        self.write(":WAV:REC 0")
 
-        tmp = self.query("WAV:LENG?")
+        tmp = self.query(":WAV:LENG?")
         N = self._to_int(tmp)
 
         divis = 24000.0
 
-        tmp = self.query("WAV:RANG?")
+        tmp = self.query(":WAV:RANG?")
         rang = self._to_float(tmp)
 
-        tmp = self.query("WAV:OFFS?")
+        tmp = self.query(":WAV:OFFS?")
         offs = self._to_float(tmp)
 
         self.traces[trace_to_get - 1].yrange = rang
@@ -1037,23 +1041,23 @@ class Yoko750(instr.Instr):
         self.traces[trace_to_get - 1].bandwidth = self.bandwidth(trace_to_get)
         self.traces[trace_to_get - 1].invert = self.invert(trace_to_get)
         self.traces[trace_to_get - 1].ac_coupled = self.ac_coupled(trace_to_get)
-        self.traces[trace_to_get - 1].module = self.query("WAV:MOD?")
-        self.traces[trace_to_get - 1].srate = self._to_float(self.query("WAV:SRAT?"))
+        self.traces[trace_to_get - 1].module = self.query(":WAV:MOD?")
+        self.traces[trace_to_get - 1].srate = self._to_float(self.query(":WAV:SRAT?"))
         self.traces[trace_to_get - 1].x = (
             np.arange(N) / self.traces[trace_to_get - 1].srate
         )
         self.traces[trace_to_get - 1].probe = self._to_int(
-            self.query("CHAN{0}:PROB?".format(trace_to_get))
+            self.query(":CHAN{0}:PROB?".format(trace_to_get))
         )
         self.traces[trace_to_get - 1].averaging = self.averaging()
 
         self.traces[trace_to_get - 1].N = N
-        self.write("WAV:STAR 0")
-        self.write("WAV:END {0}".format(N - 1))
+        self.write(":WAV:STAR 0")
+        self.write(":WAV:END {0}".format(N - 1))
         # function query_binary_values() from pyvisa module with parameter header_fmt='ieee' removes the IEEE header #<id><data_length><data>
         dataraw = np.array(
             self.visa_instr.query_binary_values(
-                "WAV:SEND?",
+                ":WAV:SEND?",
                 header_fmt='ieee',
                 datatype='h',
                 is_big_endian=False,
@@ -1079,7 +1083,7 @@ class Yoko750(instr.Instr):
             ERR("Trace {0} not enabled, cannot read data.".format(tracenum))
             return RETURN_ERROR
 
-        N = self.query_ascii_values("WAV:LENG?")[0]
+        N = self.query_ascii_values(":WAV:LENG?")[0]
 
         if 2 * N + 8 > self.visa_instr.chunk_size:
             INFO(
@@ -1115,34 +1119,34 @@ class Yoko750(instr.Instr):
             self.visa_instr.timeout = 250
 
         divis = 24000.0
-        rang = self.query_ascii_values("WAV:RANG?")[0]
-        offs = self.query_ascii_values("WAV:OFFS?")[0]
+        rang = self.query_ascii_values(":WAV:RANG?")[0]
+        offs = self.query_ascii_values(":WAV:OFFS?")[0]
         # self.write("*CLS")        # BIDOUILLAGE.  JUST TO CLEAN BUFFER. TODO: UNDERSTAND
-        # self.query("WAV:RANG?")
+        # self.query(":WAV:RANG?")
         self.traces[trace_to_get - 1].yrange = rang
         self.traces[trace_to_get - 1].offset = offs
         self.traces[trace_to_get - 1].bandwidth = self.bandwidth(trace_to_get)
         self.traces[trace_to_get - 1].invert = self.invert(trace_to_get)
         self.traces[trace_to_get - 1].ac_coupled = self.ac_coupled(trace_to_get)
-        self.traces[trace_to_get - 1].module = self.query("WAV:MOD?")
-        self.traces[trace_to_get - 1].srate = float(self.query("WAV:SRAT?"))
+        self.traces[trace_to_get - 1].module = self.query(":WAV:MOD?")
+        self.traces[trace_to_get - 1].srate = float(self.query(":WAV:SRAT?"))
         self.traces[trace_to_get - 1].x = (
             np.arange(N) / self.traces[trace_to_get - 1].srate
         )
         self.traces[trace_to_get - 1].probe = self.query_ascii_values(
-            "CHAN{0}:PROB?".format(trace_to_get)
+            ":CHAN{0}:PROB?".format(trace_to_get)
         )[0]
         self.traces[trace_to_get - 1].averaging = self.averaging()
 
         self.traces[trace_to_get - 1].N = N
         self.write(
-            "WAV:STAR 0"
+            ":WAV:STAR 0"
         )  # changement Joël et JD -> Définition du premier point de l'acquisition 17Oct16
-        self.write("WAV:END {0}".format(N - 1))
+        self.write(":WAV:END {0}".format(N - 1))
         # function query_binary_values() from pyvisa module with parameter header_fmt='ieee' removes the IEEE header #<id><data_length><data>
         dataraw = np.array(
             self.visa_instr.query_binary_values(
-                "WAV:SEND?",
+                ":WAV:SEND?",
                 header_fmt='ieee',
                 datatype='h',
                 is_big_endian=True,
@@ -1204,11 +1208,11 @@ class Yoko750(instr.Instr):
             self.visa_instr.timeout = 250
 
         # function query_binary_values() from pyvisa module with parameter header_fmt='ieee' removes the IEEE header #<id><data_length><data>
-        # dataraw = np.array(self.visa_instr.query_binary_values("WAV:SEND?", header_fmt='ieee', datatype='h', is_big_endian=False, delay=None)) # datatype 'h' is for short = 2 bytes
+        # dataraw = np.array(self.visa_instr.query_binary_values(":WAV:SEND?", header_fmt='ieee', datatype='h', is_big_endian=False, delay=None)) # datatype 'h' is for short = 2 bytes
         ## changement par léo : test de is_big_endian=True plutot que is_big_endian=False comme au dessus (original inchangé)
         dataraw = np.array(
             self.visa_instr.query_binary_values(
-                "WAV:SEND?",
+                ":WAV:SEND?",
                 header_fmt='ieee',
                 datatype='h',
                 is_big_endian=True,
@@ -1244,20 +1248,20 @@ class Yoko750(instr.Instr):
             return RETURN_ERROR
 
         if bandwidth is None:
-            tmp = self.query("CHAN{0}:BWID?".format(tr))
+            tmp = self.query(":CHAN{0}:BWID?".format(tr))
             if tmp == "FULL":
                 return 0
             else:
                 return float(tmp)
         elif bandwidth == 0:
-            self.write("CHAN{0}:BWID FULL".format(tr))
+            self.write(":CHAN{0}:BWID FULL".format(tr))
         elif isinstance(bandwidth, float):
-            self.write("CHAN{0}:BWID {1}".format(tr, bandwidth))
+            self.write(":CHAN{0}:BWID {1}".format(tr, bandwidth))
         else:
             ERR("bandwidth must be 0 (for FULL) or a frequency as a float value.")
             return RETURN_ERROR
 
-        tmp = self.query("CHAN{0}:BWID?".format(tr))
+        tmp = self.query(":CHAN{0}:BWID?".format(tr))
         if tmp == "FULL":
             bw_check = 0
         else:
@@ -1292,7 +1296,7 @@ class Yoko750(instr.Instr):
             return RETURN_ERROR
 
         if invert is None:
-            tmp = self.query_ascii_values("CHAN{0}:INV?".format(numtrace))[0]
+            tmp = self.query_ascii_values(":CHAN{0}:INV?".format(numtrace))[0]
             if tmp == 0:
                 return False
             if tmp == 1:
@@ -1305,9 +1309,9 @@ class Yoko750(instr.Instr):
                 )
                 return RETURN_ERROR
         elif invert is True:
-            self.write("CHAN{0}:INV 1".format(numtrace))
+            self.write(":CHAN{0}:INV 1".format(numtrace))
         elif invert is False:
-            self.write("CHAN{0}:INV 0".format(numtrace))
+            self.write(":CHAN{0}:INV 0".format(numtrace))
         else:
             ERR("2nd parameter must be True or False, or None for query.")
             return RETURN_ERROR
@@ -1333,7 +1337,7 @@ class Yoko750(instr.Instr):
             return RETURN_ERROR
 
         if ac_coupled is None:
-            tmp = self.query("CHAN{0}:COUP?".format(numtrace))
+            tmp = self.query(":CHAN{0}:COUP?".format(numtrace))
             if tmp == "DC":
                 return False
             if tmp == "AC":
@@ -1346,9 +1350,9 @@ class Yoko750(instr.Instr):
                 )
                 return RETURN_ERROR
         elif ac_coupled is True:
-            self.write("CHAN{0}:COUP AC".format(numtrace))
+            self.write(":CHAN{0}:COUP AC".format(numtrace))
         elif ac_coupled is False:
-            self.write("CHAN{0}:COUP DC".format(numtrace))
+            self.write(":CHAN{0}:COUP DC".format(numtrace))
         else:
             ERR("2nd parameter must be True or False, or None for query.")
             return RETURN_ERROR
@@ -1369,7 +1373,7 @@ class Yoko750(instr.Instr):
             )
             return RETURN_ERROR
 
-        return self.query_ascii_values("CHAN{0}:PROB?".format(numtrace))[0]
+        return self.query_ascii_values(":CHAN{0}:PROB?".format(numtrace))[0]
 
     def bandwidth_current_channel(self, bandwidth=None):
         self.bandwidth(None, bandwidth)
