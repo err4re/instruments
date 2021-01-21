@@ -51,7 +51,7 @@ class AnaPico(instr.Instr):
         self.visa_instr.read_termination = '\n'
         self.visa_instr.write_termination = '\n'
         self.visa_instr.send_end = True
-        self.visa_instr.query_delay = 0.0
+        self.visa_instr.query_delay = 1.0e-3
 
         # chunk_size = max data block of response data
         self.visa_instr.chunk_size = 1024
@@ -96,7 +96,7 @@ class AnaPico(instr.Instr):
         if channel in self.available_channels:
             self.write(f':SEL {channel}')
             self._current_channel = channel
-            INFO(f'Current channel: {self.current_channel}.')
+            INFO(f'Current channel: {channel}.')
         else:
 
             WARN(
@@ -124,6 +124,8 @@ class AnaPico(instr.Instr):
         return out
 
     def __del__(self):
+        if not self._clean:
+            self.clean()
         super(AnaPico, self).__del__()
 
     def __str__(self):
