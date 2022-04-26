@@ -1,4 +1,4 @@
-import instr
+from instruments import instr
 import numpy as np
 
 
@@ -74,9 +74,17 @@ class Fsva(instr.Instr):
   def f_center(self):
     return float(self.query('FREQ:CENT?'))
 
+  @f_center.setter
+  def f_center(self, f_center):
+      self.write(f'FREQ:CENT {f_center}')
+
   @property
   def f_span(self):
     return float(self.query('FREQ:SPAN?'))
+
+  @f_span.setter
+  def f_span(self, f_span):
+      self.write(f'FREQ:SPAN {f_span}')
 
   @property
   def f_start(self):
@@ -86,3 +94,8 @@ class Fsva(instr.Instr):
   def f_stop(self):
     return float(self.query('FREQ:STOP?'))
 
+  def running(self):
+    if '1' == self.query('*OPC?'):
+      return False
+    else:
+      return True
