@@ -110,7 +110,7 @@ class Zvk(instr.Instr):
     def freq_center_span(self, input_list):
         if len(input_list) == 2:
             center_frequency, frequency_span = input_list
-            self.write(f"SENSe{current_channel}:SWEep:SPACing LINear")
+            self.write(f"SENSe{self.current_channel}:SWEep:SPACing LINear")
             self.center_freq = center_frequency 
             self.freq_span = frequency_span
         else : 
@@ -126,7 +126,7 @@ class Zvk(instr.Instr):
     def freq_start_stop(self, input_list):
         if len(input_list) == 2:
             start_frequency, stop_frequency = input_list
-            self.write(f"SENSe{current_channel}:SWEep:SPACing LINear")
+            self.write(f"SENSe{self.current_channel}:SWEep:SPACing LINear")
             self.start_freq = start_frequency 
             self.stop_freq = stop_frequency
         else : 
