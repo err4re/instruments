@@ -1,4 +1,4 @@
-import instr
+from instruments import instr
 import numpy as np
 # from time import sleep
 
@@ -391,3 +391,101 @@ class Znb(instr.Instr):
 
     def set_electrical_delay(self, delay):
         self.write("SENSe{0}:CORRection:EDELay2:TIME {1}".format(self.current_channel, delay))
+
+
+    # ---------- CODE WRITTEN BY LOU 2022/03/15
+
+    @property
+    def sweep_time(self):
+        self._sweep_time = self.query_ascii_values(f"SENSE{self.current_channel}:SWEEP:TIME?")[0]
+        return self._sweep_time
+
+    @property
+    def f_center(self):
+        self._f_center = self.query_ascii_values(f"SENSE{self.current_channel}:FREQUENCY:CENTER?")[0]
+        return self._f_center
+    
+    @property
+    def f_span(self):
+        self._f_span = self.query_ascii_values(f"SENSE{self.current_channel}:FREQUENCY:SPAN?")[0]
+        return self._f_span
+
+    @property
+    def f_start(self):
+        self._f_start = self.query_ascii_values(f"SENSE{self.current_channel}:FREQUENCY:START?")[0]
+        return self._f_start
+
+    @property
+    def f_stop(self):
+        self._f_stop = self.query_ascii_values(f"SENSE{self.current_channel}:FREQUENCY:STOP?")[0]
+        return self._f_stop
+
+    @property
+    def VBW(self):
+        self._VBW = self.query_ascii_values(f"SENSE{self.current_channel}:BANDwidth?")[0]
+        return self._VBW
+    
+    @property
+    def averaging(self):
+        avg_state = bool(self.query_ascii_values(f"SENSE{self.current_channel}:AVERAGE?")[0])
+        if avg_state:
+                self._averaging = self.query_ascii_values(f"SENSE{self.current_channel}:AVERage:COUNT?")[0]
+        else : 
+            self._averaging = 1
+        return self._averaging
+
+    @property
+    def source_freq(self):
+        self._source_freq = self.query_ascii_values(f"SOURCE{self.current_channel}:FREQ?")
+        return self._source_freq
+
+    @source_freq.setter
+    def source_freq(self, freq):
+        self.write(f"SOURCE{self.current_channel}:FREQ:FIXED {freq}")
+
+    #getting and setting the number of sweeps a single trig triggers (in frequency mode)
+    @property
+    def sweep_count(self):
+        self.__sweep_count = self.query_ascii_values(f"SENSE{self.current_channel}:SWEEP:COUNT?")[0]
+        return self.__sweep_count
+    
+    @sweep_count.setter
+    def sweep_count(self, N):
+        self.write(f"SENSE{self.current_channel}:SWEEP:COUNT {N}")
+
+    #getting and setting averaging of sweeps  
+    @property
+    def average_count(self):
+        self.__average_count = self.query_ascii_values(f"SENSE{self.current_channel}:AVERage:COUNT?")[0]
+        return self.__average_count
+    
+    @average_count.setter
+    def average_count(self, count):
+        if count not in range(0, 257):
+            raise ValueError("Averaging count must be between 0 and 256")
+        else : 
+            self.write(f"SENSE{self.current_channel}:AVERage:COUNt {count}")
+
+
+    def add_segment(self, n):
+        self.write(f"SENSE{self.current_channel}:SEGMENT{n}:ADD")
+
+    def set_segment_freqs(self, segment_number, f_start, f_stop):
+        self.write(f"SENSE{self.current_channel}:SEGMENT{segment_number}:FREQUENCY:START {f_start}")
+        self.write(f"SENSE{self.current_channel}:SEGMENT{segment_number}:FREQUENCY:STOP {f_stop}")
+
+    def set_segment_points(self, segment_number, nb_points):
+        self.write(f"SENSE{self.current_channel}:SEGMENT{segment_number}:SWEEP:POINTS {nb_points}")
+
+    def set_segment_bandwidth(self, segment_number, bwidth):
+        self.write(f"SENSE{self.current_channel}:SEGMENT{segment_number}:BWIDTH {bwidth}")
+
+    def get_segment_duration(self, segment_number):
+        return self.query(f"SENSE{self.current_channel}:SEGMENT{segment_number}:SWEEP:TIME?")
+
+    def clear_all_segments(self):
+        self.write(f'SENSE{self.current_channel}:SEGMENT:DELETE:ALL')
+
+    def set_segment_power(self, segment_number, power):
+        self.write(f"SENSE{self.current_channel}:SEGMENT{segment_number}:POWER {power}")
+
