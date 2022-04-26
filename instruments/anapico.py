@@ -362,7 +362,7 @@ class AnaPico(instr.Instr):
         ''' uploads and stores a flatness correction profile
             freq: 1D array of frequency values in Hz
             amplitude: 1D array of relative amplitudes (e.g. 1=0dB, 0.5=-6.02dB)
-            /!\ accuracy : 1 MHz, 0.01 dB to reduce string length hence upload time
+            /!\accuracy : 1 MHz, 0.01 dB to reduce string length hence upload time
         '''
 
         # save a backup of the previous data to be erased
@@ -390,3 +390,14 @@ class AnaPico(instr.Instr):
 
     def trigger(self):
         self.write('*TRG')
+
+    def phase(self, phase=0, unit="rad"):
+        possible_units = ["rad", "deg"]
+        #range -1e10 to +1e10 rad
+        if isinstance(phase, float) or isinstance(phase, int):
+            if unit in possible_units:
+                self.write(f":PHAS {phase}{unit}")
+            else:
+                ERR(f'Unit must be {possible_units}')
+        else:
+            ERR('Phase must be a float or an int')
