@@ -11,10 +11,40 @@ class Instek3032(instr.Instr):
         self.visa_instr.read_termination = '\n'
         self.visa_instr.timeout = 50000
 
+    def __del__(self):
+        self.write("SYSTem:LOCal")
+        if not self._clean:
+            self.clean()
+        del self.visa_instr
+        # del self.visa_resource_manager
+
 
     def busy(self):
         """returns whether or not the device is busy with anything, like another command."""
         return not(bool(self.query("*OPC?")))
+
+    def get_channel_waveform(self):
+        """Returns the characteristics of the current channel's waveform as [name, freq, amplitude, DC offset]"""
+        self.__waveform_raw = self.query(f"SOURCE{self.current_channel}:APPLY?").split(' ')
+        name = self.__waveform_raw[0]
+        freq, amp, offset = self.__waveform_raw[1].split(',')
+        self.__waveform = [name, float(freq), float(amp), float(offset)]
+        return self.__waveform
+    
+    def apply_waveform(self, waveform, **kwargs):
+        """Changes waveform (and, optionnaly, characteristics) and **turns output on** (!!!)"""
+        if set(kwargs.keys()) == {"freq", "amp", "offset"}:
+            freq = kwargs["freq"]
+            amp = kwargs["amp"]
+            offset = kwargs["offset"]
+            
+            self.write(f"SOURCE{self.current_channel}:APPLy:{waveform} {freq},{amp},{offset}")
+        elif not kwargs : #if we have no kwargs, kwargs is empty so not(kwargs) is true
+            self.write(f"SOURCE{self.current_channel}:APPLy:{waveform}")
+        else : 
+            raise ValueError("either give no kwargs or all of 'freq', 'amp' and 'offset'")
+
+
 
 # ----------- getting / setting current channel
     @property
@@ -123,4 +153,3 @@ class Instek3032(instr.Instr):
             self.write(f"SOURce{self.current_channel}:VOLTage:UNIT {voltage_unit}")
         else : 
             raise ValueError("Unit must be 'Vpp', 'Vrms' or 'dBm' (case insensitive)")
-
