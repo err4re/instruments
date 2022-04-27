@@ -244,6 +244,11 @@ class Zvk(instr.Instr):
     #A method that triggers sweeps
     def trigger(self):
         self.write("INIT")
+
+    # cheching whether the VNA is busy
+    def busy(self):
+        """returns whether or not the device is busy with anything, like another command."""
+        return not(bool(self.query("*OPC?")))
     
     #A method for getting trace data
     def get_data(self, trace='CH1DATA'):
