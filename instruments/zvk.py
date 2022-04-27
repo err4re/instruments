@@ -55,10 +55,6 @@ class Zvk(instr.Instr):
     def output(self, out):
         self.write("SOURce{0}:POWer:STATe {1}".format(self.current_channel, 'ON' if out else 'OFF'))
 
-    @property
-    def nb_points(self):
-        N = int(self.visa_instr.query_ascii_values(f'trace:preamble? {n}')[0]/4) # division by 4 bc it gives us a number of bytes and data is 32-bit encoded
-        return N
 
     #getting and setting center frequency of graph
     @property
