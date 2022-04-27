@@ -75,13 +75,13 @@ class Instr(object):
         # print("Reading...")
         return self.visa_instr.read()
 
-    def query(self, command):
+    def query(self, command, **kwargs):
         # print("Querying {0}...".format(command))
-        return self.visa_instr.query(command)
+        return self.visa_instr.query(command, **kwargs)
 
-    def query_ascii_values(self, command):
+    def query_ascii_values(self, command, **kwargs):
         # print("Querying {0}...".format(command))
-        return self.visa_instr.query_ascii_values(command)
+        return self.visa_instr.query_ascii_values(command, **kwargs)
 
     def prepare_for_stb(self):
         # Clear the instrument's Status Byte
