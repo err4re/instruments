@@ -9,11 +9,11 @@
 RETURN_ERROR = False
 RETURN_NO_ERROR = True
 
-import instr
+from . import instr
 import importlib
 importlib.reload(instr)
 from time import sleep
-
+from contextlib import contextmanager
 
 class Yoko7651(instr.Instr):
 	def __init__(self, visa_name, visa_library=''):
@@ -63,6 +63,7 @@ class Yoko7651(instr.Instr):
 		self.is_output_on = self.output()
 		
 		self._clean = False
+		self.__writing_program__ = False
 
 	def clean(self):
 		# self.visa_instr.clear() ##don't use clear for yoko651. It resets it, and makes it bug (need to switch on/off)
@@ -125,7 +126,8 @@ class Yoko7651(instr.Instr):
 					print("ERROR: increase voltage range. Voltage unchanged")
 				else:
 					self.write("S{}".format(v))
-					self.trig()
+					if not self.__writing_program__ :
+						self.trig()
 			else:
 				print("ERROR: voltage must be a number...")
 				return RETURN_ERROR
@@ -144,7 +146,8 @@ class Yoko7651(instr.Instr):
 					print("ERROR: increase current range. Current unchanged")
 				else:
 					self.write("S{}".format(i))
-					self.trig()
+					if not self.__writing_program__:
+						self.trig()
 			else:
 				print("ERROR: current must be a number...")
 				return RETURN_ERROR
@@ -184,6 +187,7 @@ class Yoko7651(instr.Instr):
 
 	# WARNING: current range can only be set if sourcing current
 	def range_current(self, irange=None):
+		terminating_trigger = "" if self.__writing_program__ else "E"
 		if self.function is not "CURRENT":
 				print("ERROR: switch to current sourcing mode before changing current range")
 				return RETURN_ERROR
@@ -192,17 +196,17 @@ class Yoko7651(instr.Instr):
 				return self.range_i
 			elif isinstance(irange,float) or isinstance(irange,int):
 				if abs(irange)<=1.2e-3:
-					self.write("R4E")
+					self.write("R4" + terminating_trigger)
 					self.range_i = 1.2e-3
 					if abs(irange) != 1.2e-3:
 						print("WARNING: actual range set to 1.2 mA")
 				elif 1.2e-3<abs(irange)<=12e-3:
-					self.write("R5E")
+					self.write("R5" + terminating_trigger)
 					self.range_i = 12e-3
 					if abs(irange) != 12e-3:
 						print("WARNING: actual range set to 12 mA")
 				elif 12e-3<abs(irange)<=120e-3:
-					self.write("R6E")
+					self.write("R6" + terminating_trigger)
 					self.range_i = 120e-3
 					if abs(irange) != 120e-3:
 						print("WARNING: actual range set to 120 mA")
@@ -215,6 +219,7 @@ class Yoko7651(instr.Instr):
 
 	# WARNING: voltage range can only be set if sourcing voltage
 	def range_voltage(self, vrange=None):
+		terminating_trigger = "" if self.__writing_program__ else "E"
 		if self.function is not "VOLTAGE":
 				print("ERROR: switch to voltage sourcing mode before changing voltage range")
 				return RETURN_ERROR
@@ -223,27 +228,27 @@ class Yoko7651(instr.Instr):
 				return self.range_v
 			elif isinstance(vrange,float) or isinstance(vrange,int):
 				if abs(vrange)<=12e-3:
-					self.write("R2E")
+					self.write("R2" + terminating_trigger)
 					self.range_v = 12e-3
 					if abs(vrange) != 12e-3:
 						print("WARNING: actual range set to 12 mV")
 				elif 12e-3<abs(vrange)<=120e-3:
-					self.write("R3E")
+					self.write("R3" + terminating_trigger)
 					self.range_v = 120e-3
 					if abs(vrange) != 120e-3:
 						print("WARNING: actual range set to 120 mV")
 				elif 120e-3<abs(vrange)<=1.2:
-					self.write("R4E")
+					self.write("R4" + terminating_trigger)
 					self.range_v = 1.2
 					if abs(vrange) != 1.2:
 						print("WARNING: actual range set to 1.2 V")
 				elif 1.2<abs(vrange)<=12:
-					self.write("R5E")
+					self.write("R5" + terminating_trigger)
 					self.range_v = 12
 					if abs(vrange) != 12:
 						print("WARNING: actual range set to 12 V")
 				elif 12<abs(vrange)<=32:
-					self.write("R6E")
+					self.write("R6" + terminating_trigger)
 					self.range_v = 32
 					if abs(vrange) != 32:
 						print("WARNING: actual range set to 32 V")
@@ -258,10 +263,10 @@ class Yoko7651(instr.Instr):
 	# Functions to set and query the output status
 	def output(self, arg=None, force=False):
 		if arg==True and not self.is_output_on:
-			if self.function == "VOLTAGE" and np.abs(self.voltage()) > 0 and not force:
+			if self.function == "VOLTAGE" and abs(self.voltage()) > 0 and not force:
 				print("ERROR: To force turning output ON when value is non-zero, use output(True,True) syntax. Output still OFF.")
 				return RETURN_ERROR
-			if self.function == "CURRENT" and np.abs(self.current()) > 0 and not force:
+			if self.function == "CURRENT" and abs(self.current()) > 0 and not force:
 				print("ERROR: To force turning output ON when value is non-zero, use output(True,True) syntax. Output still OFF.")
 				return RETURN_ERROR
 			self.write("O1E")
@@ -269,10 +274,10 @@ class Yoko7651(instr.Instr):
 		elif arg==True and self.is_output_on:
 			print("WARNING: Output already ON. Doing nothing.")
 		elif arg==False and self.is_output_on:
-			if self.function == "VOLTAGE" and np.abs(self.voltage()) > 0 and not force:
+			if self.function == "VOLTAGE" and abs(self.voltage()) > 0 and not force:
 				print("ERROR: To force turning output OFF when value is non-zero, use output(False,True) syntax. Output still ON.")
 				return RETURN_ERROR
-			if self.function == "CURRENT" and np.abs(self.current()) > 0 and not force:
+			if self.function == "CURRENT" and abs(self.current()) > 0 and not force:
 				print("ERROR: To force turning output OFF when value is non-zero, use output(False,True) syntax. Output still ON.")
 				return RETURN_ERROR
 			self.write("O0E")
@@ -293,7 +298,94 @@ class Yoko7651(instr.Instr):
 		else:
 			print("ERROR: argument must be a boolean or omitted for query")
 			return RETURN_ERROR
+	
+	# Function to set the generation time duration of a program (ie : how long a step lasts)
+	def interval(self, duration):
+		if 0.1 <= duration <= 3600 : 
+			self.write(f"PI {duration:.1f}")
+			return
+		else : 
+			raise ValueError("duration must be between 0.1s and 3600 s with 0.1 s resolution")
+	
+	# function to set sweep duration within a program step
+	def sweep_duration(self, duration):
+		if duration == 0:
+			self.write(f"SW {duration:.0f}")
+			return
+		elif 0 < duration <= 3600 :
+			self.write(f"SW {duration:.1f}")
+			return
+		else : 
+			raise ValueError("duration must be between 0s and 3600 s with 0.1 s resolution")
+	
+	# function to set the program run mode 
+	def program_run_mode(self, mode):
+		if mode == 0 : 
+			self.write("M0")
+		elif mode == 1 : 
+			self.wite("M1")
+		elif isinstance(mode, str):
+			if mode.lower() in ["single", "one", "once"]:
+				self.write("M0")
+			elif mode.lower() in ["loop", "repeat"]:
+				self.write("M1")
+		
+		raise ValueError("Input was not right format (0, 1 or string : Repeat (= Loop = Once), Single (= One)")
+	
+	def run_program(self):
+		self.write("RU2")
 
+	def hold_program(self):
+		self.write("RU0")
+	
+	def step_program(self): # FOR SOME REASON THIS DOESN'T WORK ?? I guess I don't understand how it works
+		self.write("RU1")
+	
+	def resume_program(self):
+		self.write("RU3")
+	
+	def begin_writing_program(self):
+		print("Starting to write program...")
+		self.__writing_program__ = True
+		self.write("PRS")
+	
+	def finish_writing_program(self):
+		self.__writing_program__ = False
+		self.write("PRE")
+		print("Finishing program writing.")
+	
+	def save_current_program_to_slot(self, slot_number):
+		if isinstance(slot_number, int) and 1 <= slot_number <= 7:
+			self.write(f"SV {slot_number}")
+		else :
+			raise ValueError("invalid slot number. Must be btw 1 and 7 and an int.")
+	
+	def load_program_from_slot(self, slot_number):
+		if isinstance(slot_number, int) and 1 <= slot_number <= 7:
+			self.write(f"LD {slot_number}")
+			print("INFO : output has been turned off automatically by loading program.")
+		else :
+			raise ValueError("invalid slot number. Must be btw 1 and 7 and an int.")
+
+	# Creates a new object to be used within a with statement.
+	# example, if yoko is the name of the instance repesenting the instrument : 
+	# with yoko.write_program as program :
+	# 	set stuff using methods on `program`
+	# 	...
+	# as soon as you leave the statement, program creation ends
+	@contextmanager
+	def write_program(self) :
+		""" Used in a __with__ statement to create programs. 
+		Directives from the yoko manual : 
+		- When beginning to write progam, set function, range, and output data. 
+		- specify input data last, as it'll trigger the change to the next step."""
+		self.begin_writing_program()
+
+		yield self
+
+		self.finish_writing_program()
+
+	
 def output_force(self, arg=None):
 	return self.output(arg, force=True)
 
@@ -305,3 +397,4 @@ def output_on(self):
 
 def output_off(self):
 	return self.output(False)
+
