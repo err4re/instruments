@@ -184,7 +184,10 @@ class Zvk(instr.Instr):
     #getting and setting bandwidth
     @property
     def bandwidth(self):
-        self.__bandwidth = self.query_ascii_values(f"SENSE{self.current_channel}:BANDwidth?")[0]
+        try :
+            self.__bandwidth = self.query_ascii_values(f"SENSE{self.current_channel}:BANDwidth?")[0]
+        except ValueError :
+            self.__bandwidth = self.query(f"SENSE{self.current_channel}:BANDwidth?")
         return self.__bandwidth
     
     @bandwidth.setter
