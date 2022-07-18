@@ -96,7 +96,7 @@ class AnaPico(instr.Instr):
         if channel in self.available_channels:
             self.write(f':SEL {channel}')
             self._current_channel = channel
-            INFO(f'Current channel: {channel}.')
+#            INFO(f'Current channel: {channel}.')
         else:
 
             WARN(
