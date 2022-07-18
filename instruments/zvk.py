@@ -255,7 +255,7 @@ class Zvk(instr.Instr):
     
     #A method for getting trace data
     def get_data(self, trace='CH1DATA'):
-        tr_names = [ 'CH1DATA', 'MDATA1', 'MDATA2', 'MDATA3', 'MDATA4', 'MDATA5', 'MDATA6', 'MDATA7', 'MDATA8' ]
+        tr_names = [ 'CH1DATA','CH2DATA','CH3DATA','CH4DATA', 'MDATA1', 'MDATA2', 'MDATA3', 'MDATA4', 'MDATA5', 'MDATA6', 'MDATA7', 'MDATA8' ]
         if trace in tr_names:
             traces = [ trace ]
         elif trace == 'all':
