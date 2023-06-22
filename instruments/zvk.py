@@ -128,6 +128,23 @@ class Zvk(instr.Instr):
         else : 
             raise ValueError("Frequency args must be a an array of 2 numbers : start freq, then stop freq")
 
+
+
+
+    # set / get source frequency (when sweeping power, for example)
+    @property
+    def freq(self):
+        self._freq = self.query_ascii_values("SOURce{0}:FREQ?".format(self.current_channel))[0]
+        return self._freq
+    
+    @freq.setter
+    def freq(self, freq):
+        self.write("SOURce{0}:FREQ {1}".format(self.current_channel, freq))
+        # self.write("SOURce{0}:POWer:MODE ON".format(self.current_channel))
+
+
+
+
     #getting and setting sweep duration
     @property
     def sweep_duration(self):
