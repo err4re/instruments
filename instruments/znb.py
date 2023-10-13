@@ -124,10 +124,10 @@ class Znb(instr.Instr):
 
     ### BETA 20190807 JLS -- SEEMS OK
     def get_trace_sdata(self, trace_name):
-        self.write("FORMAT REAL,32")
+        self.write("FORMAT REAL,64")
         self.write(f"CALC{self.current_channel}:PAR:SEL '{trace_name}'")
-        f = self.visa_instr.query_binary_values(f":CALC{self.current_channel}:DATA:STIM?")
-        values_interlaced = np.array(self.visa_instr.query_binary_values(f":CALC{self.current_channel}:DATA? SDAT"))
+        f = self.visa_instr.query_binary_values(f":CALC{self.current_channel}:DATA:STIM?", datatype='d')
+        values_interlaced = np.array(self.visa_instr.query_binary_values(f":CALC{self.current_channel}:DATA? SDAT", datatype='d'))
         # values_interlaced = np.array([float(txt) for txt in text.split(',')])
         z = values_interlaced[0::2] + 1j*values_interlaced[1::2]
         return np.array(f),np.array(z)
