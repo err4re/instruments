@@ -4,6 +4,7 @@
 
 from instruments import instr
 import importlib
+from instruments.configs.anapico_config import AnaFreqSweepConfig, AnaExtTrigInConfig
 
 importlib.reload(instr)
 
@@ -12,6 +13,8 @@ import numpy as np
 import inspect
 from datetime import datetime
 from time import sleep
+
+from typing import Optional
 
 _DEBUG_ = True
 _WARN_ = True
@@ -47,7 +50,7 @@ def INFO(*args, **kwarg):
 class AnaPico(instr.Instr):
     def __init__(self, visa_name, visa_library=''):
         super(AnaPico, self).__init__(visa_name, visa_library)
-        self.visa_instr.timeout = 5000  # in ms.
+        self.visa_instr.timeout = 50000  # in ms.
         self.visa_instr.read_termination = '\n'
         self.visa_instr.write_termination = '\n'
         self.visa_instr.send_end = True
@@ -63,7 +66,10 @@ class AnaPico(instr.Instr):
         self.available_channels = [1, 2]
 
         self._current_channel = 1
-        self.current_channel = 1
+        self.current_channel = self._current_channel
+
+        self._init_cont = False
+        self.init_cont = self._init_cont
 
 
     def write(self, command, debug=False):
@@ -196,50 +202,147 @@ class AnaPico(instr.Instr):
         else:
             ERR(f'unit must be {possible_units} or None for query')
 
-    def power(self, power=None, unit=None):
-        possible_units = ["W", "V", "DBM", "DB"]
-        # powmaxdBm = 15
-        # powmindBm = -50
-        if power is None:
-            return float(self.query(":POW?"))
-        elif isinstance(power, float) or isinstance(power, int):
-            if unit is None:
-                u = self.unit_power()
-                WARN(f"Using default unit for power: {u}")
-                self.write(f":POW {power}")
-            elif unit.upper() in possible_units:
-                self.write(f":POW {power}{unit.upper()}")
-            else:
-                ERR(f'Unit must be None or {possible_units}')
-        else:
-            ERR('Power must be None, a float or an int')
 
-    def freq_mode(self, mode=None):
-        possible_freq_modes = [
-            "FIX",
-            "FIXED",
-            "CW",
-            "SWE",
-            "SWEEP",
-            "LIST",
-            "CHIR",
-            "CHIRP",
-        ]
-        if mode is None:
-            return self.query(":FREQ:MODE?")
-        elif mode in possible_freq_modes:
+    @property
+    def power(self) -> float:
+        return float(self.query(":POW?"))
+
+        
+    @power.setter
+    def power(self, power_value: float, unit: str = None) -> None:
+        possible_units = ["W", "V", "DBM", "DB"]
+        try:
+            power_value = float(power_value)  # Try to convert to float
+        except (TypeError, ValueError):
+            raise ValueError('Power must be a float, an int, or something convertible to float')
+
+        if unit is None or unit.upper() not in possible_units:
+            # Assuming unit_power() is a method that returns the default power unit
+            default_unit = self.unit_power()
+            print(f"Using default unit for power: {default_unit}")
+            self.write(f":POW {power_value}")
+        else:
+            self.write(f":POW {power_value}{unit.upper()}")
+
+    
+    @property
+    def freq_mode(self) -> str:
+        return self.query(":FREQ:MODE?")
+
+    @freq_mode.setter
+    def freq_mode(self, mode: str) -> None:
+        possible_freq_modes = ["FIX", "FIXed", "CW", "SWE", "SWEep", "LIST", "CHIR", "CHIRp"]
+        if mode in possible_freq_modes:
             self.write(f":FREQ:MODE {mode}")
         else:
-            ERR(f'mode must be None, or {possible_freq_modes}')
+            raise ValueError(f'mode must be one of {possible_freq_modes}')
 
-    def power_mode(self, mode=None):
-        possible_power_modes = ["FIX", "FIXED", "SWE", "SWEEP", "LIST"]
-        if mode is None:
-            return self.query(":POW:MODE?")
-        elif mode in possible_power_modes:
+
+    @property
+    def power_mode(self) -> str:
+        return self.query(":POW:MODE?")
+
+    @power_mode.setter
+    def power_mode(self, mode: str) -> None:
+        possible_power_modes = ["FIX", "FIXed", "SWE", "SWEep", "LIST"]
+        if mode in possible_power_modes:
             self.write(f":POW:MODE {mode}")
         else:
-            ERR(f'mode must be None, or {possible_power_modes}')
+            raise ValueError(f'mode must be one of {possible_power_modes}')
+        
+    @property
+    def start_frequency(self) -> float:
+        return float(self.query(f':SOURce:FREQ:STARt?'))
+
+    @start_frequency.setter
+    def start_frequency(self, value: float) -> None:
+        self.write(f':SOURce:FREQ:STARt {value}')
+
+    @property
+    def stop_frequency(self) -> float:
+        return float(self.query(f':SOURce:FREQ:STOP?'))
+
+    @stop_frequency.setter
+    def stop_frequency(self, value: float) -> None:
+        self.write(f':SOURce:FREQ:STOP {value}')
+
+    @property
+    def sweep_points(self) -> int:
+        return int(self.query(f':SOURce:SWEep:POINts?'))
+
+    @sweep_points.setter
+    def sweep_points(self, value: int) -> None:
+        self.write(f':SOURce:SWEep:POINts {value}')
+
+    @property
+    def sweep_delay(self) -> float:
+        return float(self.query(f':SOURce:SWEep:DELay?'))
+
+    @sweep_delay.setter
+    def sweep_delay(self, value: float) -> None:
+        self.write(f':SOURce:SWEep:DELay {value}')
+
+    @property
+    def sweep_count(self) -> Optional[int]:
+        val = self.query(':SOURce:SWEep:COUNt?')
+        if val.upper() == 'INF':
+            return float('inf')  # or return None, or a string 'inf'
+        return int(float(val))  # fallback for values like '5.0'
+
+    @sweep_count.setter
+    def sweep_count(self, value: int) -> None:
+        self.write(f':SOURce:SWEep:COUNt {value}')
+
+    @property
+    def sweep_progress(self) -> float:
+        return float(self.query(f':SOURce:SWEep:PROGress?'))
+    
+    @property
+    def sweep_dwell_time(self) -> float:
+        return float(self.query(f':SOURce:SWEep:DWELl?'))
+    
+    @sweep_dwell_time.setter
+    def sweep_dwell_time(self, value: float) -> None:
+        self.write(f':SOURce:SWEep:DWELl {value}')
+
+    @property
+    def trigger_source(self) -> str:
+        return self.query(f':TRIGger:SOURce?').strip()
+
+    @trigger_source.setter
+    def trigger_source(self, value: str) -> None:
+        self.write(f':TRIGger:SOURce {value}')
+
+    @property
+    def trigger_type(self) -> str:
+        return self.query(f':TRIGger:TYPE?').strip()
+
+    @trigger_type.setter
+    def trigger_type(self, value: str) -> None:
+        self.write(f':TRIGger:TYPE {value}')
+
+    @property
+    def trigger_slope(self) -> str:
+        return self.query(f'TRIGger:SLOPe?').strip()
+
+    @trigger_slope.setter
+    def trigger_slope(self, value: str) -> None:
+        self.write(f'TRIGger:SLOPe {value}')
+
+    @property
+    def init_cont(self) -> bool:
+        return self._init_cont
+    
+    @init_cont.setter
+    def init_cont(self, value: bool) -> None:
+        self._init_cont = value
+        state = 'ON' if value else 'OFF'
+        self.write(f':INITiate:CONTinuous {state}')
+
+    
+
+
+
 
     def freq(self, freq=None):
         fmin = 300.0e3
@@ -254,6 +357,8 @@ class AnaPico(instr.Instr):
         else:
             ERR('Freq must be None, a float or an int')
 
+
+
     def modulation_on(self):
         self.write(":MOD 1")
 
@@ -261,6 +366,7 @@ class AnaPico(instr.Instr):
         self.write(":MOD 0")
 
     def modulation(self, val=None):
+        ### MOD? command does not seem to exist??? ###
         if val is None:
             out = self.query(":MOD?")
             if out == "1":
@@ -401,3 +507,75 @@ class AnaPico(instr.Instr):
                 ERR(f'Unit must be {possible_units}')
         else:
             ERR('Phase must be a float or an int')
+
+
+    def set_freq_sweep(self, config: AnaFreqSweepConfig) -> None:
+        self.current_channel = config.channel
+        self.power_mode = config.power_mode
+        self.power = config.power
+
+        if config.dummy:
+            self.start_frequency = config.dummy_frequency
+            self.stop_frequency = config.stop_frequency
+            self.sweep_points = config.num_points +1
+        else:
+            self.start_frequency = config.start_frequency
+            self.stop_frequency = config.stop_frequency
+            self.sweep_points = config.num_points
+
+        self.sweep_dwell_time = config.sweep_dwell_time
+        self.sweep_delay = config.sweep_delay
+        self.sweep_count = config.sweep_count
+        self.freq_mode = config.frequency_mode
+
+    def set_ext_trig(self, config: AnaExtTrigInConfig) -> None:
+        self.trigger_source = config.trigger_source
+        self.trigger_type = config.trigger_type
+        self.trigger_slope = config.trigger_slope
+        self.init_cont = config.continuous_initiate
+
+
+    @property
+    def metadata(self) -> dict:
+        """Snapshot of instrument settings for both channels."""
+        try:
+            original_channel = self.current_channel
+            metadata = {
+                "IDN": self.idn,
+                "Channels": {}
+            }
+
+            for ch in self.available_channels:
+                self.current_channel = ch  # switch channel
+                metadata["Channels"][f"Channel {ch}"] = {
+                    "Output Enabled": self.output(),
+                    "Frequency (Hz)": self.freq(),
+                    "Power (dBm)": self.power,
+                    "Power Unit": self.unit_power(),
+                    "Frequency Mode": self.freq_mode,
+                    "Power Mode": self.power_mode,
+                    "Start Frequency (Hz)": self.start_frequency,
+                    "Stop Frequency (Hz)": self.stop_frequency,
+                    "Sweep Points": self.sweep_points,
+                    "Sweep Dwell Time (s)": self.sweep_dwell_time,
+                    "Sweep Delay (s)": self.sweep_delay,
+                    "Sweep Count": self.sweep_count,
+                    "Sweep Progress (%)": self.sweep_progress
+                }
+
+            # Global/Shared config
+            metadata["Trigger Source"] = self.trigger_source
+            metadata["Trigger Type"] = self.trigger_type
+            metadata["Trigger Slope"] = self.trigger_slope
+            metadata["Continuous Initiate"] = self.init_cont
+
+            self.current_channel = original_channel  # restore original
+            return metadata
+
+        except Exception as e:
+            ERR("Failed to get metadata:", e)
+            return {"error": str(e)}
+
+
+
+    

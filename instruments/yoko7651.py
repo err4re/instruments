@@ -14,6 +14,7 @@ import importlib
 importlib.reload(instr)
 from time import sleep
 from contextlib import contextmanager
+from instruments.configs.yoko7651_config import YokoCurrSweepConfig, YokoVoltSweepConfig
 
 class Yoko7651(instr.Instr):
 	def __init__(self, visa_name, visa_library=''):
@@ -21,7 +22,7 @@ class Yoko7651(instr.Instr):
 		self.visa_instr.write_termination = "\n"
 		#self.visa_instr.baud_rate = 9600
 		self.visa_instr.chunk_size = 2048*8
-		self.visa_instr.timeout = 1000	# ms
+		self.visa_instr.timeout = 10000	# ms
 
 		self.write("H0")	# turns headers off, cf p. 6-35
 		self.write("DL1")	# term char: LF
@@ -46,7 +47,7 @@ class Yoko7651(instr.Instr):
 		self.range_i = None
 		self.range_v = None
 		if self.function == "CURRENT":
-			self.range_i = [x["mode"] for x in self.ranges if x["code"]==self.range_code][0]
+			self.range_i = [x["value"] for x in self.ranges if x["code"]==self.range_code][0]
 		elif self.function == "VOLTAGE":
 			self.range_v = [x["value"] for x in self.ranges if x["code"]==self.range_code][0]
 		else:
@@ -114,7 +115,7 @@ class Yoko7651(instr.Instr):
 
 
 	def voltage(self, v=None):
-		if self.function is not "VOLTAGE":
+		if self.function != "VOLTAGE":
 				print("ERROR: switch to voltage sourcing mode before changing voltage value")
 				return RETURN_ERROR
 		else:
@@ -134,7 +135,7 @@ class Yoko7651(instr.Instr):
 
 
 	def current(self, i=None):
-		if self.function is not "CURRENT":
+		if self.function != "CURRENT":
 				print("ERROR: switch to current sourcing mode before changing current value")
 				return RETURN_ERROR
 		else:
@@ -188,8 +189,11 @@ class Yoko7651(instr.Instr):
 	# WARNING: current range can only be set if sourcing current
 	def range_current(self, irange=None):
 		terminating_trigger = "" if self.__writing_program__ else "E"
-		if self.function is not "CURRENT":
+		if self.function != "CURRENT":
 				print("ERROR: switch to current sourcing mode before changing current range")
+				return RETURN_ERROR
+		elif abs(self.current()) > irange:
+				print("ERROR: currently sourcing current that is larger than new current range")
 				return RETURN_ERROR
 		else:
 			if irange is None:
@@ -217,12 +221,56 @@ class Yoko7651(instr.Instr):
 				print("ERROR: parameter must be a value between 0 and 120e-3 (or omitted for query")
 
 
+	def ramp_current(self, target, duration=10, autorange=False, blocking=False):
+			''' Ramp current from actual value to target in duration seconds.
+			By default doesn't change range.
+			'''
+			if self.function != "CURRENT":
+					print("ERROR: switch to current sourcing mode before changing current value")
+					return RETURN_ERROR
+
+			if target == self.current():
+				print("already sourcing target current, no ramping necessary.")
+			elif isinstance(target,float) or isinstance(target,int):
+				
+				if target > self.range_i:
+					print("ERROR: increase current range. current unchanged")
+				else:
+					progstr="PRS" #start programming
+					if autorange==False:
+						progstr+="S"
+					elif autorange==True:
+						progstr+="SA"
+					else:
+						print('autorange parameter should be either True of False. Stop here.')
+						return
+					progstr+=str(target)
+					progstr+="PRE" #end programming
+					progstr+="SW"+str(duration) #sweep time
+					progstr+="PI"+str(duration) #interval time. Use same value as SW for linear ramp
+					progstr+="M1" #single mode
+					progstr+="RU2" #run 
+					self.write(progstr)
+					# self.trig()
+			else:
+				print("ERROR: current must be a number... now it is", target)
+				return RETURN_ERROR
+			
+			if blocking:
+				while self.program_running():
+					sleep(0.1)
+
+
 	# WARNING: voltage range can only be set if sourcing voltage
 	def range_voltage(self, vrange=None):
 		terminating_trigger = "" if self.__writing_program__ else "E"
-		if self.function is not "VOLTAGE":
+		if self.function != "VOLTAGE":
 				print("ERROR: switch to voltage sourcing mode before changing voltage range")
 				return RETURN_ERROR
+		elif abs(self.voltage()) > vrange:
+				print("ERROR: currently sourcing voltage that is larger than new voltage range")
+				return RETURN_ERROR
+		
 		else:
 			if vrange is None:
 				return self.range_v
@@ -259,6 +307,52 @@ class Yoko7651(instr.Instr):
 				print("ERROR: parameter must be a value between 0 and 32 (or omitted for query")
 
 
+	def ramp_voltage(self, target, duration=10, autorange=False, blocking=False):
+			''' Ramp voltage from actual value to target in duration seconds.
+			By default doesn't change range.
+			'''
+			if self.function != "VOLTAGE":
+					print("ERROR: switch to voltage sourcing mode before changing voltage value")
+					return RETURN_ERROR
+
+			if target == self.voltage():
+				print("already sourcing target voltage, no ramping necessary.")
+			elif isinstance(target,float) or isinstance(target,int):
+				
+				if target > self.range_v:
+					print("ERROR: increase voltage range. voltage unchanged")
+				else:
+					progstr="PRS" #start programming
+					if autorange==False:
+						progstr+="S"
+					elif autorange==True:
+						progstr+="SA"
+					else:
+						print('autorange parameter should be either True of False. Stop here.')
+						return
+					progstr+=str(target)
+					progstr+="PRE" #end programming
+					progstr+="SW"+str(duration) #sweep time
+					progstr+="PI"+str(duration) #interval time. Use same value as SW for linear ramp
+					progstr+="M1" #single mode
+					progstr+="RU2" #run 
+					self.write(progstr)
+					# self.trig()
+			else:
+				print("ERROR: voltage must be a number... now it is", target)
+				return RETURN_ERROR
+			
+			if blocking:
+				while self.program_running():
+					sleep(0.1)
+
+
+
+	def program_running(self):
+
+		status = self.query("OC")
+		return (int(status[5:]) & 0b00000010 == 0b00000010)
+
 
 	# Functions to set and query the output status
 	def output(self, arg=None, force=False):
@@ -286,6 +380,7 @@ class Yoko7651(instr.Instr):
 			print("WARNING: Output already OFF. Doing nothing.")
 		elif arg is None:
 			status = self.query("OC")
+			
 			if int(status[5:]) & 0b00010000 == 0b00010000:
 				self.is_output_on = True
 				return True
@@ -295,6 +390,7 @@ class Yoko7651(instr.Instr):
 			else:
 				print("ERROR: Bit 5 of OC is neither 0 or 1 (obviously, coding error!)")
 				return RETURN_ERROR
+		
 		else:
 			print("ERROR: argument must be a boolean or omitted for query")
 			return RETURN_ERROR
@@ -366,6 +462,17 @@ class Yoko7651(instr.Instr):
 			print("INFO : output has been turned off automatically by loading program.")
 		else :
 			raise ValueError("invalid slot number. Must be btw 1 and 7 and an int.")
+		
+
+
+	def set_source_current_sweep(self, config: YokoCurrSweepConfig) -> None:
+		self.source_current()
+		self.range_current(config.current_range)
+
+	def set_source_voltage_sweep(self, config: YokoVoltSweepConfig) -> None:
+		self.source_voltage()
+		self.range_voltage(config.voltage_range)
+
 
 	# Creates a new object to be used within a with statement.
 	# example, if yoko is the name of the instance repesenting the instrument : 
@@ -385,6 +492,8 @@ class Yoko7651(instr.Instr):
 
 		self.finish_writing_program()
 
+
+
 	
 def output_force(self, arg=None):
 	return self.output(arg, force=True)
@@ -397,4 +506,6 @@ def output_on(self):
 
 def output_off(self):
 	return self.output(False)
+
+
 

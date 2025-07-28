@@ -1,6 +1,8 @@
 from instruments import instr
 import numpy as np
-# from time import sleep
+from instruments.configs.znb_config import ZnbLinConfig, ZnbSegm, ZnbSegmConfig, ZnbExtTrigOutConfig, ZnbCWConfig
+from typing import Tuple, Union
+from time import sleep
 
 class Znb(instr.Instr):
 
@@ -70,9 +72,9 @@ class Znb(instr.Instr):
         self.write("SENSe{0}:SWEep:POINts {1}".format(self.current_channel, nb_points))
 
 
-    def set_average(self, nb_averages):
+    def set_average(self, nb_averages, mode='MOVing'):
         if nb_averages >= 1:
-            self.write("SENSe{0}:AVERage:MODE REDuce".format(self.current_channel))
+            self.set_average_mode(mode) #default is moving average
             self.write("SENSe{0}:AVERage:COUNt {1}".format(self.current_channel, nb_averages))
             self.write("SENSe{0}:SWEep:COUNt {1}".format(self.current_channel, nb_averages))
             self.write("SENSe{0}:AVERage:STATe ON".format(self.current_channel))
@@ -80,6 +82,15 @@ class Znb(instr.Instr):
             self.average_off()
         else:
             print("ERROR in set_average: nb_averages should be >1 or =1 to turn off averaging.")
+
+    def set_average_mode(self, mode):
+        accepted_modes = ["AUTO", "FLAT", "RED", "MOV", "FLATten", "REDuce", "MOVing"]
+
+        if mode in accepted_modes:
+            self.write(f"SENSe{self.current_channel}:AVERage:MODE {mode}")
+        else:
+            print(f"Error: format must be {accepted_modes}.")
+
 
     def average_restart(self):
         self.write("SENSe{0}:AVERage:CLEar".format(self.current_channel))
@@ -186,41 +197,114 @@ class Znb(instr.Instr):
         self.write("SENSe{0}:FREQuency:CENTer {1}".format(self.current_channel, int(fcenter)))
         self.write("SENSe{0}:FREQuency:SPAN {1}".format(self.current_channel, int(fspan)))
 
+    def set_freq_CW(self,fcenter):
+        self.write("SENSe{0}:FREQuency:CW {1}".format(self.current_channel, int(fcenter)))
+
 
     @property
-    def sweep_type(self):
-        return self.query(f"SENS{self.current_channel}:SWE:TYPE?")
+    def sweep_type(self) -> str:
+        return self.query(f'SENS{self.current_channel}:SWE:TYPE?').strip()
 
-#### added by Leo. use at your own risk. ###
+    @sweep_type.setter
+    def sweep_type(self, value: str) -> None:
+        valid_sweep_types = ["LINear", "LOGarithmic", "POWer", "CW", "POINt", "SEGMent"]
+        if value in valid_sweep_types:
+            self.write(f'SENS{self.current_channel}:SWE:TYPE {value}')
+        else:
+            raise ValueError(f'Invalid sweep type. Valid options are {valid_sweep_types}')
+        
 
-    # sweep type can be one of: LINear | LOGarithmic | POWer | CW | POINt | SEGMent
-    def set_sweep_type(self, sweep_type):
-        self.write(f'SENS{self.current_channel}:SWE:TYPE {sweep_type}')
 
+    @property
+    def meta(self) -> dict:
+        sweep_type = self.query(f'SENS{self.current_channel}:SWE:TYPE?')
+        
+        if sweep_type != 'SEGM':
+            self._meta = {
+                'sweep_type': sweep_type,
+                'center': float(self.query(f'SENS{self.current_channel}:FREQ:CENT?')),
+                'span': float(self.query(f'SENS{self.current_channel}:FREQ:SPAN?')),
+                'start': float(self.query(f'SENS{self.current_channel}:FREQ:STAR?')),
+                'stop': float(self.query(f'SENS{self.current_channel}:FREQ:STOP?')),
+                'nb_points': int(self.query(f'SENS{self.current_channel}:SWE:POIN?')),
+                'VBW': int(self.query(f'SENS{self.current_channel}:BAND?')),
+                'trace_param': self.get_trace_param(),
+                'average': int(self.averaging),
+                'power': self.get_power()
+            }
+        else:
+            nb_segments = int(self.query(f"SENSe{self.current_channel}:SEGMent:COUNt?"))
+            self._meta = {
+                'trace_param': self.get_trace_param(),
+                'sweep_type': sweep_type,
+                'nb_segments': nb_segments,
+                'power': self.get_power()
+            }
+
+            for n_seg in range(1, nb_segments + 1):
+                segment = {
+                    'center': float(self.query(f'SENS{self.current_channel}:SEGM{n_seg}:FREQ:CENT?')),
+                    'span': float(self.query(f'SENS{self.current_channel}:SEGM{n_seg}:FREQ:SPAN?')),
+                    'start': float(self.query(f'SENS{self.current_channel}:SEGM{n_seg}:FREQ:STAR?')),
+                    'stop': float(self.query(f'SENS{self.current_channel}:SEGM{n_seg}:FREQ:STOP?')),
+                    'nb_points': int(self.query(f'SENS{self.current_channel}:SEGM{n_seg}:SWE:POIN?')),
+                    'VBW': int(self.query(f'SENS{self.current_channel}:SEGM{n_seg}:BWIDth?')),
+                }
+                self._meta[f'segment_{n_seg}'] = segment
+
+        return self._meta
+
+    @property
+    def ext_trigger_out_interval(self) -> str:
+        response: str = self.query(f'TRIGger:CHANnel{self.current_channel}:AUXiliary:INTerval?')
+        return response.strip()
+
+    @ext_trigger_out_interval.setter
+    def ext_trigger_out_interval(self, interval: str) -> None:
+        self.write(f'TRIGger:CHANnel{self.current_channel}:AUXiliary:INTerval {interval}')
+        
     #print current state of VNA
     def get_state(self):
-        meta = {
-            'center': float(self.query(f'SENS{self.current_channel}:FREQ:CENT?')),
-            'span': float(self.query(f'SENS{self.current_channel}:FREQ:SPAN?')),
-            'start': float(self.query(f'SENS{self.current_channel}:FREQ:STAR?')),
-            'stop': float(self.query(f'SENS{self.current_channel}:FREQ:STOP?')),
-            'nb_points': int(self.query(f'SENS{self.current_channel}:SWE:POIN?')),
-            'VBW': int(self.query(f'SENS{self.current_channel}:BAND?')),
-            'trace_param': self.get_trace_param(),
-            'sweep_type': self.query(f'SENS{self.current_channel}:SWE:TYPE?'),
-            'power': self.get_power()
-            }
-        print('\n Current state of VNA is : \n')
-        print(f'center is at {meta["center"]*1e-9} GHz')
-        print(f'span is of {meta["span"]*1e-6} MHz')
-        print(f'start is {meta["start"]*1e-9} GHz')
-        print(f'stop is {meta["stop"]*1e-9} GHz')
-        print(f'Number of points: {meta["nb_points"]}')
-        print(f'Bandwidth of {meta["VBW"]}')
-        print(f'Power is: {meta["power"]} dBm')
-        print(f'Sweep type is {meta["sweep_type"]}')
-        print(f'Trace and channel parameters: {meta["trace_param"]}')
-        print()
+
+        meta = self.meta
+
+        # not a segmented sweep
+        if meta['sweep_type'] != 'SEGM':
+            print('\n Current state of VNA is : \n')
+            print(f'center is at {meta["center"]*1e-9} GHz')
+            print(f'span is of {meta["span"]*1e-6} MHz')
+            print(f'start is {meta["start"]*1e-9} GHz')
+            print(f'stop is {meta["stop"]*1e-9} GHz')
+            print(f'Number of points: {meta["nb_points"]}')
+            print(f'Bandwidth of {meta["VBW"]} Hz')
+            print(f'Average: {meta["average"]}')
+            print(f'Power is: {meta["power"]} dBm')
+            print(f'Sweep type is {meta["sweep_type"]}')
+            print(f'Trace and channel parameters: {meta["trace_param"]}')
+            print()
+
+        # segmented sweep
+        else:
+            print('\n Current state of VNA is : \n')
+            print(f'Sweep type is {meta["sweep_type"]}')
+            print(f'Number of segments: {meta["nb_segments"]}')
+            print(f'Trace and channel parameters: {meta["trace_param"]}')
+            print(f'Power is: {meta["power"]} dBm')
+
+            for n_seg in range(1, meta["nb_segments"]+1):
+                print(f'\n segment number {n_seg}:')
+                print(f'center is at {meta[f'segment_{n_seg}']["center"]*1e-9} GHz')
+                print(f'span is of {meta[f'segment_{n_seg}']["span"]*1e-6} MHz')
+                print(f'start is {meta[f'segment_{n_seg}']["start"]*1e-9} GHz')
+                print(f'stop is {meta[f'segment_{n_seg}']["stop"]*1e-9} GHz')
+                print(f'Number of points: {meta[f'segment_{n_seg}']["nb_points"]}')
+                print(f'Bandwidth of {meta[f'segment_{n_seg}']["VBW"]}')
+                print()
+
+    # get meta data for VNA state, same as printed above
+    def get_meta(self):
+           
+        return self.meta
 
     def get_trace_param(self):
         return self.query(f'CALC{self.current_channel}:PAR:CAT?')
@@ -349,7 +433,8 @@ class Znb(instr.Instr):
             trace_names   = [X for X in blabla.split(",")[1::2] if X != ""]
             # return trace_numbers, trace_names
             return trace_names
-
+        
+    
     def get_trace_number_from_trace_name(self, trace_name):
         bla = self.query("CONFigure:TRACe:NAME:ID? '{0}'".format(trace_name))
         try:
@@ -390,6 +475,8 @@ class Znb(instr.Instr):
 
 
     def set_electrical_delay(self, delay):
+        #ONLY WORKS FOR S21
+        #EDELay2 sets delay for port 2!
         self.write("SENSe{0}:CORRection:EDELay2:TIME {1}".format(self.current_channel, delay))
 
 
@@ -447,7 +534,7 @@ class Znb(instr.Instr):
     @property
     def sweep_count(self):
         self.__sweep_count = self.query_ascii_values(f"SENSE{self.current_channel}:SWEEP:COUNT?")[0]
-        return self.__sweep_count
+        return int(self.__sweep_count)
     
     @sweep_count.setter
     def sweep_count(self, N):
@@ -456,15 +543,61 @@ class Znb(instr.Instr):
     #getting and setting averaging of sweeps  
     @property
     def average_count(self):
-        self.__average_count = self.query_ascii_values(f"SENSE{self.current_channel}:AVERage:COUNT?")[0]
+        # Retrieve the value from the instrument
+        count = self.query_ascii_values(f"SENSE{self.current_channel}:AVERage:COUNT?")[0]
+        # Convert to integer, assuming the instrument always returns a value that can be converted
+        self.__average_count = int(count)
         return self.__average_count
-    
+
     @average_count.setter
     def average_count(self, count):
-        if count not in range(0, 257):
+        if not isinstance(count, int):
+            raise TypeError("Averaging count must be an integer")
+        if not 0 <= count <= 256:
             raise ValueError("Averaging count must be between 0 and 256")
-        else : 
-            self.write(f"SENSE{self.current_channel}:AVERage:COUNt {count}")
+        self.write(f"SENSE{self.current_channel}:AVERage:COUNt {count}")
+
+
+    
+
+
+    @property
+    def ext_trigger_out_enable(self) -> bool:
+        response: str = self.query(f'TRIGger:CHANnel{self.current_channel}:AUXiliary:ENABle?')
+        return response.strip().upper() == 'ON'
+
+    @ext_trigger_out_enable.setter
+    def ext_trigger_out_enable(self, enable: bool) -> None:
+        state: str = 'ON' if enable else 'OFF'
+        self.write(f'TRIGger:CHANnel{self.current_channel}:AUXiliary:ENABle {state}')
+
+    @property
+    def ext_trigger_out_interval(self) -> str:
+        response: str = self.query(f'TRIGger:CHANnel{self.current_channel}:AUXiliary:INTerval?')
+        return response.strip()
+
+    @ext_trigger_out_interval.setter
+    def ext_trigger_out_interval(self, interval: str) -> None:
+        self.write(f'TRIGger:CHANnel{self.current_channel}:AUXiliary:INTerval {interval}')
+
+    @property
+    def ext_trigger_out_position(self) -> str:
+        response: str = self.query(f'TRIGger:CHANnel{self.current_channel}:AUXiliary:POSition?')
+        return response.strip()
+
+    @ext_trigger_out_position.setter
+    def ext_trigger_out_position(self, position: str) -> None:
+        self.write(f'TRIGger:CHANnel{self.current_channel}:AUXiliary:POSition {position}')
+
+    @property
+    def ext_trigger_out_polarity(self) -> str:
+        response: str = self.query(f'TRIGger:CHANnel{self.current_channel}:AUXiliary:OPOL?')
+        return response.strip()
+
+    @ext_trigger_out_polarity.setter
+    def ext_trigger_out_polarity(self, polarity: str) -> None:
+        self.write(f'TRIGger:CHANnel{self.current_channel}:AUXiliary:OPOL {polarity}')
+
 
 
     def add_segment(self, n):
@@ -488,4 +621,135 @@ class Znb(instr.Instr):
 
     def set_segment_power(self, segment_number, power):
         self.write(f"SENSE{self.current_channel}:SEGMENT{segment_number}:POWER {power}")
+
+
+    ## Alex' code
+    def set_lin_sweep(self, config: ZnbLinConfig) -> None:
+        self.sweep_type = 'LINear'
+        self.set_nb_points(config.num_points)
+        self.set_if_bw(config.bandwidth)
+        self.set_power(config.power)
+        self.set_freq_center_span(config.center_frequency, config.span)
+        self.set_average(config.num_averages, config.average_mode)
+
+
+    def sweep(self) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Perform a sweep on the current channel and retrieve frequency response data.
+
+        This function initiates a frequency sweep based on the current configuration
+        of the network analyzer. It waits for the completion of the sweep for each averaging
+        cycle and then retrieves the trace data for the current measurement.
+
+        The sweep is repeated for the number of times specified in `average_count`.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: A tuple containing two NumPy arrays. The first array
+            represents the frequency points of the sweep. The second array contains the complex
+            response data corresponding to these frequencies.
+
+        Note:
+            The device configuration, including the sweep type and range, should be set prior to
+            calling this function. The function uses the current measurement name set in the
+            network analyzer instance.
+        """
+
+        #for _ in range(self.average_count):
+        self.send_trigger()
+        # Wait for the sweep to complete, blocking
+        while not self.query('*OPC?'):
+            pass
+
+        f, z = self.get_trace_sdata(self.current_measurement_name)
+
+        self.sweep_hold()
+        return f, z
+    
+
+    def sweeps(self) -> Tuple[np.ndarray, list]:
+        """
+        Perform the number of sweeps defined in `sweep_count` and return all the data acquired at the end.
+        """
+
+        #run sweep
+        self.sweep_hold()
+        self.sweep_single()
+        while not self.query('*OPC?'):
+            pass
+
+        # while (int(self.query('CALC:DATA:NSW:COUN?')) < self.sweep_count):
+        #     pass
+
+        #sleep(0.1)
+
+        acquired_sweeps = int(self.query('CALC:DATA:NSW:COUN?'))
+        print(acquired_sweeps)
+
+        #get all the data
+        self.write("FORMAT REAL,64")
+        self.write(f"CALC{self.current_channel}:PAR:SEL '{self.current_measurement_name}'")
+        f = self.visa_instr.query_binary_values(f":CALC{self.current_channel}:DATA:STIM?", datatype='d')
+
+        values_interlaced = np.array(self.visa_instr.query_binary_values(f":CALC{self.current_channel}:DATA:NSWeep:FIRSt? SDAT,1,{acquired_sweeps}", datatype='d'))
+        z = values_interlaced[0::2] + 1j*values_interlaced[1::2]
+
+        S = np.array_split(z, acquired_sweeps)
+
+        return f, S
+
+        
+    def set_segm_sweep(self, config: ZnbSegmConfig) -> None:
+        self.clear_all_segments()
+
+        self.set_if_bw(config.segments[0].bandwidth)
+        self.set_power(config.segments[0].power)
+
+        self.set_average(config.num_averages)        
+        
+        for i,segment in enumerate(config.segments):
+            self.add_segment(i+1)
+            self.set_segment_freqs(i+1, segment.start_frequency, segment.stop_frequency)
+            self.set_segment_points(i+1, segment.num_points)
+            
+            if segment.bandwidth != config.segments[0].bandwidth:
+                self.set_segment_bandwidth(segment.bandwidth)
+            if segment.power != config.segments[0].power:
+                self.set_segment_power(config.segments[0].power)
+            
+        self.sweep_type = "SEGMent"
+
+    def set_cw_sweep(self, config: ZnbCWConfig) -> None:
+        self.sweep_type = "POINt"
+        self.set_freq_CW(config.center_frequency)
+        self.set_nb_points(config.num_points)
+        self.set_if_bw(config.bandwidth)
+        self.set_power(config.power)
+        self.set_average(config.num_averages, config.average_mode)
+
+
+    def set_sweep(self, config: Union[ZnbSegmConfig, ZnbLinConfig, ZnbCWConfig]) -> None:
+        """
+        Sets the VNA sweep configuration based on the provided configuration object.
+
+        Parameters:
+        - config: An instance of either ZnbLinConfig or ZnbSegmConfig.
+        """
+        if isinstance(config, ZnbLinConfig):
+            self.set_lin_sweep(config)
+        elif isinstance(config, ZnbSegmConfig):
+            self.set_segm_sweep(config)
+        elif isinstance(config, ZnbCWConfig):
+            self.set_cw_sweep(config)
+        else:
+            raise TypeError("Unsupported configuration type.")
+        
+
+
+
+    def set_ext_trigger_out(self, config: ZnbExtTrigOutConfig) -> None:
+        self.ext_trigger_out_enable = config.enable
+        self.ext_trigger_out_interval = config.interval
+        self.ext_trigger_out_polarity = config.output_polarity
+        self.ext_trigger_out_position = config.position
+
 
