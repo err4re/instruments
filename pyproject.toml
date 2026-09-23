@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "instruments"
+version = "0.1"
+description = "Python VISA drivers for lab instruments (Collège de France / FluxQuantumLab)"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Jean-Loup Smirr", email = "jean-loup.smirr@college-de-france.fr"},
+]
+requires-python = ">=3.8"
+dependencies = [
+    "pyvisa",
+    "numpy",
+    "matplotlib",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/err4re/instruments"
+
+# Only the actual driver package is installable from this repo. `instruments/RFSoC/`
+# holds several unrelated, independently-packaged vendored projects (QICK, an RFSoC
+# textbook, DSP notebooks, ...); each has its own setup.py and is not part of this
+# distribution, so package discovery is explicitly limited to what should ship.
+[tool.setuptools.packages.find]
+include = ["instruments", "instruments.configs"]

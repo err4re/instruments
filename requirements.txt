@@ -1,0 +1,11 @@
+# Mirrors the [project.dependencies] in pyproject.toml.
+# `pip install -e .` (see README) already installs these automatically;
+# this file is here for `pip install -r requirements.txt` workflows.
+pyvisa
+numpy
+matplotlib
+
+# PyVISA itself is only the API layer -- it also needs a VISA backend, which
+# is not installed by pip:
+#   - NI-VISA (proprietary, install separately: https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html)
+#   - or the pure-Python backend: pip install pyvisa-py

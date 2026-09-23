@@ -50,7 +50,7 @@ def INFO(*args, **kwarg):
 class AnaPico(instr.Instr):
     def __init__(self, visa_name, visa_library=''):
         super(AnaPico, self).__init__(visa_name, visa_library)
-        self.visa_instr.timeout = 50000  # in ms.
+        self.visa_instr.timeout = 6*600000  # in ms. 60 min
         self.visa_instr.read_termination = '\n'
         self.visa_instr.write_termination = '\n'
         self.visa_instr.send_end = True

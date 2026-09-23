@@ -4,6 +4,8 @@ from instruments.configs.znb_config import ZnbLinConfig, ZnbSegm, ZnbSegmConfig,
 from typing import Tuple, Union
 from time import sleep
 
+from functools import cached_property
+
 class Znb(instr.Instr):
 
     def __init__(self, visa_name, visa_library=''): # '' is recognized as default visa DLL by pyvisa
@@ -12,7 +14,7 @@ class Znb(instr.Instr):
         # self.current_channel = 0
         # self.current_measurement_name = None
         self.visa_instr.read_termination = '\n'
-        self.visa_instr.timeout = 50000
+        self.visa_instr.timeout = 6*600000         # 60 minutes
         self.write("ROSCillator INTernal")
         channel = self.list_channels()
         if channel:
@@ -25,7 +27,7 @@ class Znb(instr.Instr):
         else:
             return False
         self.set_current_channel_and_trace(self.current_channel, self.current_measurement_name)
-        self.set_data_format("ASCII")
+        self.set_data_format("REAL, 64") # used to be ASCII
 
 
 
@@ -146,6 +148,17 @@ class Znb(instr.Instr):
     def get_fdata(self):
         text = self.query("CALCulate{0}:DATA? FDATA".format(self.current_channel))
         return np.array([float(txt) for txt in text.split(',')])
+
+    #temporary fix to get magnitude data when min hold enabled on VNA
+    def get_trace_fdata(self, trace_name):
+            self.write("FORMAT REAL,64")
+            self.write(f"CALC{self.current_channel}:PAR:SEL '{trace_name}'")
+            f = self.visa_instr.query_binary_values(f":CALC{self.current_channel}:DATA:STIM?", datatype='d')
+            values_interlaced = np.array(self.visa_instr.query_binary_values(f":CALC{self.current_channel}:DATA? FDAT", datatype='d'))
+            # values_interlaced = np.array([float(txt) for txt in text.split(',')])
+            # z = values_interlaced[0::2] + 1j*values_interlaced[1::2]
+            z = values_interlaced
+            return np.array(f),np.array(z)
 
 
     def set_format(self, format):
@@ -623,6 +636,51 @@ class Znb(instr.Instr):
         self.write(f"SENSE{self.current_channel}:SEGMENT{segment_number}:POWER {power}")
 
 
+    # ---------- CODE WRITTEN BY çağlar 2026-09-17 11:27:34
+
+    ## Implementing trace hold capability as explained at
+    ## https://www.rohde-schwarz.com/webhelp/ZNB_HTML_UserManual_en/Content/7be6f52751ea485d.htm
+    ## https://www.rohde-schwarz.com/webhelp/ZNB_HTML_UserManual_en/Content/41a39ca946f4445e.htm#d7164113e42901
+    ## When hold MIN or MAX is turned on, the minimum (or maximum) REAL value of the magnitude will be stored over all traces measured from that point
+    ## - To refresh new min/max, need to restart sweep (INIT:ALL see https://www.rohde-schwarz.com/webhelp/ZNB_HTML_UserManual_en/Content/fec70ef118664f50.htm#d7164113e52092)
+    ## - To stop MIN or MAX set hold_function to OFF
+
+    @property
+    def hold_function(self):
+        response: str = self.query(f"CALC:PHOL?")
+        return response.strip()
+
+    @hold_function.setter
+    def hold_function(self, hold_state):
+        if hold_state not in {"MIN", "MAX", "OFF"}:
+            raise ValueError("Hold function must be MIN, MAX, or OFF")
+        else :
+            self.write(f"CALC:PHOL OFF; PHOL {hold_state}")
+    """
+    CALCulate<Chn>:PHOLd <HoldFunc>
+
+    Enables, disables, or restarts the max hold and the min hold functions.
+    Suffix
+    <Chn>
+
+    Channel number used to identify the active trace
+    Parameters
+    <HoldFunc>
+    MIN | MAX | OFF
+
+    MIN - Enable the min hold function.
+    MAX - enable the max hold function.
+    OFF - disable the max hold or min hold function.
+
+    *RST: OFF
+    Example
+
+    *RST; :CALC:PHOL MAX
+    Reset the instrument and enable the max hold function.
+    CALC:PHOL OFF; PHOL MAX
+    Restart max hold.
+    """
+
     ## Alex' code
     def set_lin_sweep(self, config: ZnbLinConfig) -> None:
         self.sweep_type = 'LINear'
@@ -631,6 +689,9 @@ class Znb(instr.Instr):
         self.set_power(config.power)
         self.set_freq_center_span(config.center_frequency, config.span)
         self.set_average(config.num_averages, config.average_mode)
+
+        self.sweep_count = config.num_sweeps
+        self.hold_function = config.hold_function
 
 
     def sweep(self) -> Tuple[np.ndarray, np.ndarray]:
@@ -660,7 +721,11 @@ class Znb(instr.Instr):
         while not self.query('*OPC?'):
             pass
 
-        f, z = self.get_trace_sdata(self.current_measurement_name)
+        #temporary fix to get min hold data processed on vna when activated
+        if self.hold_function == "OFF":
+            f, z = self.get_trace_sdata(self.current_measurement_name)
+        else:
+            f, z = self.get_trace_fdata(self.current_measurement_name)
 
         self.sweep_hold()
         return f, z
@@ -725,6 +790,9 @@ class Znb(instr.Instr):
         self.set_if_bw(config.bandwidth)
         self.set_power(config.power)
         self.set_average(config.num_averages, config.average_mode)
+
+        self.sweep_count = config.num_sweeps
+        self.hold_function = config.hold_function
 
 
     def set_sweep(self, config: Union[ZnbSegmConfig, ZnbLinConfig, ZnbCWConfig]) -> None:

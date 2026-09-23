@@ -13,8 +13,10 @@ class ZnbLinConfig:
         start_frequency (float): Start frequency of the sweep in Hz.
         stop_frequency (float): Stop frequency of the sweep in Hz.
         bandwidth (float): Bandwidth of the sweep in Hz.
+        num_sweeps (int): Number of sweeps.
         num_points (int): Number of points in the sweep.
         num_averages (int): Number of averages for the sweep.
+        hold_function (str): Whether to hold minimum, maximum value or off.
         power (float): Power level for the sweep in dBm.
         powers (np.ndarray[np.float64]): Power levels in case of a power sweep in dBm.
     """
@@ -23,8 +25,10 @@ class ZnbLinConfig:
     start_frequency: float = None
     stop_frequency: float = None
     bandwidth: float = None
+    num_sweeps: int = 1
     num_points: int = None
     num_averages: int = None
+    hold_function: str = "OFF"
     average_mode: str = 'MOVing'
     power: float = None
     powers: np.ndarray[np.float64] = None
@@ -73,8 +77,10 @@ class ZnbLinConfig:
                 f"Start Frequency: {self.start_frequency} Hz, "
                 f"Stop Frequency: {self.stop_frequency} Hz, "
                 f"Bandwidth: {self.bandwidth} Hz, "
+                f"Number of Sweeps: {self.num_sweeps}, "
                 f"Number of Points: {self.num_points}, "
-                f"Number of Averages: {self.num_averages}")
+                f"Number of Averages: {self.num_averages}, "
+                f"Hold function: {self.hold_function}")
     
 @dataclass
 class ZnbCWConfig:
@@ -97,6 +103,9 @@ class ZnbCWConfig:
     power: float = None
     powers: np.ndarray[np.float64] = None
     power_sweep_length: int = None
+
+    num_sweeps: int = 1
+    hold_function: str = "OFF"
 
     def __post_init__(self):
         # Calculate and validate frequency parameters
@@ -146,6 +155,7 @@ class ZnbSegm:
     bandwidth: float = None
     num_points: int = None
     power: float = None
+    hold_function: str = "OFF"
 
     def __post_init__(self):
         if self.index is None:
