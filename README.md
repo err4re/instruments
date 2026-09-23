@@ -67,7 +67,7 @@ from instruments.znb import Znb
 from instruments.configs.znb_config import ZnbLinConfig
 
 vna = Znb("TCPIP0::192.168.1.5::inst0::INSTR")
-config = ZnbLinConfig(center_frequency=6e9, span=500e6, bandwidth=1e3,
+config = ZnbLinConfig(center_frequency=8e9, span=500e6, bandwidth=1e3,
                        num_points=1001, num_averages=10, power=-30)
 vna.set_sweep(config)
 freqs, s_data = vna.sweep()
