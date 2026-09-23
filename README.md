@@ -1,7 +1,7 @@
 # instruments
 
 Python VISA drivers for the lab instruments used to run experiments on
-superconducting circuits (Collège de France / FluxQuantumLab). Wraps
+superconducting circuits. Wraps
 [PyVISA](https://pyvisa.readthedocs.io/) so each instrument (VNAs, source
 meters, signal generators, a lock-in, an oscilloscope, a motor controller...)
 gets a small Python class with named methods/properties instead of raw SCPI
